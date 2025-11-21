@@ -290,3 +290,38 @@ docker-compose exec redis redis-cli ping
 ## License
 
 Apache License 2.0
+
+Hướng dẫn setup trên mỗi node:
+
+1. Trên máy 192.168.80.55 (Spark Master)
+
+celery -A mycelery.system_worker.app worker --loglevel=INFO -E -Q node_55
+
+2. Trên máy 192.168.80.53 (Spark Worker)
+
+celery -A mycelery.system_worker.app worker --loglevel=INFO -E -Q node_53
+
+3. Trên máy 192.168.80.57 (Hadoop Namenode + Kafka)
+
+celery -A mycelery.system_worker.app worker --loglevel=INFO -E -Q node_57
+
+4. Trên máy 192.168.80.87 (Hadoop Datanode)
+
+celery -A mycelery.system_worker.app worker --loglevel=INFO -E -Q node_87
+
+DAGs đã tạo:
+
+| DAG                    | Mô tả                                                                                    |
+|------------------------|------------------------------------------------------------------------------------------|
+| bigdata_pipeline_start | Khởi động cluster theo thứ tự: Namenode → Datanode + Spark Master → Spark Worker + Kafka |
+| bigdata_pipeline_stop  | Dừng cluster theo thứ tự ngược: Kafka → Spark → Hadoop                                   |
+
+Pipeline Flow:
+
+Start:
+Hadoop Namenode (55)
+    ├── Hadoop Datanode (87) → Kafka (57)
+    └── Spark Master (55) → Spark Worker (53)
+
+Stop:
+Kafka (57) → Spark Worker (53) → Spark Master (55) → Hadoop Datanode (87) → Hadoop Namenode (57)

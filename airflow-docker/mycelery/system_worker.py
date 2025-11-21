@@ -15,7 +15,20 @@ app.conf.update(
     result_serializer='json',
     timezone='Asia/Ho_Chi_Minh',
     enable_utc=True,
+    # Định nghĩa routes cho các queue khác nhau
+    task_routes={
+        'mycelery.system_worker.*': {'queue': 'system'},
+    },
 )
+
+# Định nghĩa các node trong cluster
+CLUSTER_NODES = {
+    'spark-master': {'host': '192.168.80.55', 'queue': 'node_55'},
+    'spark-worker': {'host': '192.168.80.53', 'queue': 'node_53'},
+    'hadoop-namenode': {'host': '192.168.80.57', 'queue': 'node_57'},
+    'hadoop-datanode': {'host': '192.168.80.87', 'queue': 'node_87'},
+    'kafka': {'host': '192.168.80.57', 'queue': 'node_57'},
+}
 
 @app.task(bind=True)
 def run_command(self, command):
