@@ -165,7 +165,7 @@ def docker_ps(self, all_containers=False):
 def docker_compose_up(self, path, detach=True, build=False, force_recreate=False):
     """Chạy docker-compose up với path được chỉ định"""
     try:
-        cmd = ['docker compose', '-f', path, 'up']
+        cmd = ['docker', 'compose', '-f', path, 'up']
 
         if detach:
             cmd.append('-d')
@@ -204,7 +204,7 @@ def docker_compose_up(self, path, detach=True, build=False, force_recreate=False
 def docker_compose_down(self, path, volumes=False, remove_orphans=False):
     """Dừng và xóa containers với docker-compose down"""
     try:
-        cmd = ['docker compose', '-f', path, 'down']
+        cmd = ['docker', 'compose', '-f', path, 'down']
 
         if volumes:
             cmd.append('-v')
@@ -237,10 +237,35 @@ def docker_compose_down(self, path, volumes=False, remove_orphans=False):
 
 
 @app.task(bind=True)
+def docker_compose_ps(self, path):
+    """Liệt kê containers của docker-compose"""
+    try:
+        cmd = ['docker', 'compose', '-f', path, 'ps']
+
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=60
+        )
+        return {
+            'status': 'success',
+            'output': result.stdout,
+            'stderr': result.stderr,
+            'return_code': result.returncode
+        }
+    except Exception as e:
+        return {
+            'status': 'error',
+            'message': str(e)
+        }
+
+
+@app.task(bind=True)
 def docker_compose_logs(self, path, service=None, tail=100):
     """Lấy logs từ docker-compose"""
     try:
-        cmd = ['docker compose', '-f', path, 'logs', '--tail', str(tail)]
+        cmd = ['docker', 'compose', '-f', path, 'logs', '--tail', str(tail)]
 
         if service:
             cmd.append(service)
