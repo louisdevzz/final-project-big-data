@@ -79,8 +79,6 @@ dmypy.json
 
 # Airflow specific
 logs/
-airflow.db
-airflow.cfg
 webserver_config.py
 airflow-webserver.pid
 standalone_admin_password.txt
