@@ -127,138 +127,138 @@ def task_docker_compose_logs(**context):
 
 # ============== DAG 1: Docker Container Management ==============
 
-with DAG(
-    dag_id='docker_container_management',
-    description='DAG quản lý Docker containers: run, stop, remove, list',
-    start_date=datetime(2024, 1, 1),
-    schedule=None,
-    catchup=False,
-    tags=['docker', 'container'],
-    params={
-        'image': Param('hello-world', type='string', description='Docker image'),
-        'container_name': Param('', type='string', description='Tên container'),
-        'ports': Param('', type='string', description='Port mapping (vd: 8080:80,3000:3000)'),
-        'all_containers': Param(False, type='boolean', description='Hiển thị tất cả containers'),
-    }
-) as dag_docker:
+# with DAG(
+#     dag_id='docker_container_management',
+#     description='DAG quản lý Docker containers: run, stop, remove, list',
+#     start_date=datetime(2024, 1, 1),
+#     schedule=None,
+#     catchup=False,
+#     tags=['docker', 'container'],
+#     params={
+#         'image': Param('hello-world', type='string', description='Docker image'),
+#         'container_name': Param('', type='string', description='Tên container'),
+#         'ports': Param('', type='string', description='Port mapping (vd: 8080:80,3000:3000)'),
+#         'all_containers': Param(False, type='boolean', description='Hiển thị tất cả containers'),
+#     }
+# ) as dag_docker:
 
-    docker_ps_task = PythonOperator(
-        task_id='docker_list_containers',
-        python_callable=task_docker_ps,
-    )
+#     docker_ps_task = PythonOperator(
+#         task_id='docker_list_containers',
+#         python_callable=task_docker_ps,
+#     )
 
-    docker_run_task = PythonOperator(
-        task_id='docker_run_container',
-        python_callable=task_docker_run,
-    )
+#     docker_run_task = PythonOperator(
+#         task_id='docker_run_container',
+#         python_callable=task_docker_run,
+#     )
 
-    docker_stop_task = PythonOperator(
-        task_id='docker_stop_container',
-        python_callable=task_docker_stop,
-    )
+#     docker_stop_task = PythonOperator(
+#         task_id='docker_stop_container',
+#         python_callable=task_docker_stop,
+#     )
 
-    docker_remove_task = PythonOperator(
-        task_id='docker_remove_container',
-        python_callable=task_docker_remove,
-    )
-
-
-# ============== DAG 2: Docker Compose Management ==============
-
-with DAG(
-    dag_id='docker_compose_management',
-    description='DAG quản lý Docker Compose: up, down, ps, logs',
-    start_date=datetime(2024, 1, 1),
-    schedule=None,
-    catchup=False,
-    tags=['docker', 'compose'],
-    params={
-        'compose_path': Param('~/bd/spark/docker-compose.yml', type='string', description='Đường dẫn file docker-compose.yml'),
-        'services': Param('spark-master', type='string', description='Services cụ thể (vd: spark-master,spark-worker). Để trống = tất cả'),
-        'detach': Param(True, type='boolean', description='Chạy ở chế độ detached'),
-        'build': Param(False, type='boolean', description='Build images trước khi start'),
-        'force_recreate': Param(False, type='boolean', description='Force recreate containers'),
-        'remove_volumes': Param(False, type='boolean', description='Xóa volumes khi down'),
-        'remove_orphans': Param(False, type='boolean', description='Xóa orphan containers'),
-        'service': Param('spark-master', type='string', description='Service cho logs (để trống = tất cả)'),
-        'tail': Param(100, type='integer', description='Số dòng logs'),
-    }
-) as dag_compose:
-
-    compose_up_task = PythonOperator(
-        task_id='docker_compose_up',
-        python_callable=task_docker_compose_up,
-    )
-
-    compose_down_task = PythonOperator(
-        task_id='docker_compose_down',
-        python_callable=task_docker_compose_down,
-    )
-
-    compose_ps_task = PythonOperator(
-        task_id='docker_compose_ps',
-        python_callable=task_docker_compose_ps,
-    )
-
-    compose_logs_task = PythonOperator(
-        task_id='docker_compose_logs',
-        python_callable=task_docker_compose_logs,
-    )
+#     docker_remove_task = PythonOperator(
+#         task_id='docker_remove_container',
+#         python_callable=task_docker_remove,
+#     )
 
 
-# ============== DAG 3: Docker Compose Pipeline ==============
+# # ============== DAG 2: Docker Compose Management ==============
 
-with DAG(
-    dag_id='docker_compose_pipeline',
-    description='Pipeline: kiểm tra status -> up -> kiểm tra lại',
-    start_date=datetime(2024, 1, 1),
-    schedule=None,
-    catchup=False,
-    tags=['docker', 'compose', 'pipeline'],
-    params={
-        'compose_path': Param('~/bd/spark/docker-compose.yml', type='string', description='Đường dẫn file docker-compose.yml'),
-        'build': Param(False, type='boolean', description='Build images trước khi start'),
-    }
-) as dag_compose_pipeline:
+# with DAG(
+#     dag_id='docker_compose_management',
+#     description='DAG quản lý Docker Compose: up, down, ps, logs',
+#     start_date=datetime(2024, 1, 1),
+#     schedule=None,
+#     catchup=False,
+#     tags=['docker', 'compose'],
+#     params={
+#         'compose_path': Param('~/bd/spark/docker-compose.yml', type='string', description='Đường dẫn file docker-compose.yml'),
+#         'services': Param('spark-master', type='string', description='Services cụ thể (vd: spark-master,spark-worker). Để trống = tất cả'),
+#         'detach': Param(True, type='boolean', description='Chạy ở chế độ detached'),
+#         'build': Param(False, type='boolean', description='Build images trước khi start'),
+#         'force_recreate': Param(False, type='boolean', description='Force recreate containers'),
+#         'remove_volumes': Param(False, type='boolean', description='Xóa volumes khi down'),
+#         'remove_orphans': Param(False, type='boolean', description='Xóa orphan containers'),
+#         'service': Param('spark-master', type='string', description='Service cho logs (để trống = tất cả)'),
+#         'tail': Param(100, type='integer', description='Số dòng logs'),
+#     }
+# ) as dag_compose:
 
-    def task_compose_check_before(**context):
-        """Kiểm tra status trước khi up"""
-        params = context['params']
-        path = params.get('compose_path')
-        result = docker_compose_ps.delay(path)
-        return {'task_id': result.id, 'step': 'check_before'}
+#     compose_up_task = PythonOperator(
+#         task_id='docker_compose_up',
+#         python_callable=task_docker_compose_up,
+#     )
 
-    def task_compose_start(**context):
-        """Start docker-compose"""
-        params = context['params']
-        path = params.get('compose_path')
-        build = params.get('build', False)
-        result = docker_compose_up.delay(path, detach=True, build=build)
-        return {'task_id': result.id, 'step': 'start'}
+#     compose_down_task = PythonOperator(
+#         task_id='docker_compose_down',
+#         python_callable=task_docker_compose_down,
+#     )
 
-    def task_compose_check_after(**context):
-        """Kiểm tra status sau khi up"""
-        params = context['params']
-        path = params.get('compose_path')
-        result = docker_compose_ps.delay(path)
-        return {'task_id': result.id, 'step': 'check_after'}
+#     compose_ps_task = PythonOperator(
+#         task_id='docker_compose_ps',
+#         python_callable=task_docker_compose_ps,
+#     )
 
-    step1_check = PythonOperator(
-        task_id='step1_check_status',
-        python_callable=task_compose_check_before,
-    )
+#     compose_logs_task = PythonOperator(
+#         task_id='docker_compose_logs',
+#         python_callable=task_docker_compose_logs,
+#     )
 
-    step2_start = PythonOperator(
-        task_id='step2_compose_up',
-        python_callable=task_compose_start,
-    )
 
-    step3_verify = PythonOperator(
-        task_id='step3_verify_status',
-        python_callable=task_compose_check_after,
-    )
+# # ============== DAG 3: Docker Compose Pipeline ==============
 
-    step1_check >> step2_start >> step3_verify
+# with DAG(
+#     dag_id='docker_compose_pipeline',
+#     description='Pipeline: kiểm tra status -> up -> kiểm tra lại',
+#     start_date=datetime(2024, 1, 1),
+#     schedule=None,
+#     catchup=False,
+#     tags=['docker', 'compose', 'pipeline'],
+#     params={
+#         'compose_path': Param('~/bd/spark/docker-compose.yml', type='string', description='Đường dẫn file docker-compose.yml'),
+#         'build': Param(False, type='boolean', description='Build images trước khi start'),
+#     }
+# ) as dag_compose_pipeline:
+
+#     def task_compose_check_before(**context):
+#         """Kiểm tra status trước khi up"""
+#         params = context['params']
+#         path = params.get('compose_path')
+#         result = docker_compose_ps.delay(path)
+#         return {'task_id': result.id, 'step': 'check_before'}
+
+#     def task_compose_start(**context):
+#         """Start docker-compose"""
+#         params = context['params']
+#         path = params.get('compose_path')
+#         build = params.get('build', False)
+#         result = docker_compose_up.delay(path, detach=True, build=build)
+#         return {'task_id': result.id, 'step': 'start'}
+
+#     def task_compose_check_after(**context):
+#         """Kiểm tra status sau khi up"""
+#         params = context['params']
+#         path = params.get('compose_path')
+#         result = docker_compose_ps.delay(path)
+#         return {'task_id': result.id, 'step': 'check_after'}
+
+#     step1_check = PythonOperator(
+#         task_id='step1_check_status',
+#         python_callable=task_compose_check_before,
+#     )
+
+#     step2_start = PythonOperator(
+#         task_id='step2_compose_up',
+#         python_callable=task_compose_start,
+#     )
+
+#     step3_verify = PythonOperator(
+#         task_id='step3_verify_status',
+#         python_callable=task_compose_check_after,
+#     )
+
+#     step1_check >> step2_start >> step3_verify
 
 
 # ============== DAG 4: Docker Compose Stop ==============
@@ -427,13 +427,6 @@ with DAG(
         task_id='start_kafka',
         python_callable=start_kafka,
     )
-
-    # Định nghĩa thứ tự chạy:
-    # 1. Hadoop Namenode trước
-    # 2. Hadoop Datanode sau Namenode
-    # 3. Spark Master (có thể song song với Hadoop Datanode)
-    # 4. Spark Worker sau Spark Master
-    # 5. Kafka sau khi Hadoop đã sẵn sàng
 
     task_hadoop_namenode >> task_hadoop_datanode
     task_hadoop_namenode >> task_spark_master >> task_spark_worker

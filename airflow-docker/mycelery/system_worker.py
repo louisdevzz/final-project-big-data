@@ -185,49 +185,46 @@ def docker_compose_up(self, path, services=None, detach=True, build=False, force
         build: Build images trước khi start
         force_recreate: Force recreate containers
     """
+    # Expand ~ thành home directory
+    path = os.path.expanduser(path)
+    cmd = ['docker', 'compose', '-f', path, 'up']
+
+    if detach:
+        cmd.append('-d')
+
+    if build:
+        cmd.append('--build')
+
+    if force_recreate:
+        cmd.append('--force-recreate')
+
+    # Thêm services vào cuối command
+    if services:
+        if isinstance(services, str):
+            cmd.append(services)
+        elif isinstance(services, list):
+            cmd.extend(services)
+
     try:
-        # Expand ~ thành home directory
-        path = os.path.expanduser(path)
-        cmd = ['docker', 'compose', '-f', path, 'up']
-
-        if detach:
-            cmd.append('-d')
-
-        if build:
-            cmd.append('--build')
-
-        if force_recreate:
-            cmd.append('--force-recreate')
-
-        # Thêm services vào cuối command
-        if services:
-            if isinstance(services, str):
-                cmd.append(services)
-            elif isinstance(services, list):
-                cmd.extend(services)
-
         result = subprocess.run(
             cmd,
             capture_output=True,
             text=True,
             timeout=600
         )
-        return {
-            'status': 'success',
-            'stdout': result.stdout,
-            'stderr': result.stderr,
-            'return_code': result.returncode
-        }
     except subprocess.TimeoutExpired:
-        return {
-            'status': 'error',
-            'message': 'Docker compose up timed out (600s)'
-        }
-    except Exception as e:
-        return {
-            'status': 'error',
-            'message': str(e)
-        }
+        raise Exception('Docker compose up timed out (600s)')
+
+    # Kiểm tra return code và raise exception nếu lỗi
+    if result.returncode != 0:
+        raise Exception(f"Docker compose up failed: {result.stderr}")
+
+    return {
+        'status': 'success',
+        'stdout': result.stdout,
+        'stderr': result.stderr,
+        'return_code': result.returncode
+    }
 
 
 @app.task(bind=True)
@@ -240,10 +237,10 @@ def docker_compose_down(self, path, services=None, volumes=False, remove_orphans
         volumes: Xóa volumes
         remove_orphans: Xóa orphan containers
     """
-    try:
-        # Expand ~ thành home directory
-        path = os.path.expanduser(path)
+    # Expand ~ thành home directory
+    path = os.path.expanduser(path)
 
+    try:
         # Nếu có services cụ thể, dùng stop + rm thay vì down
         if services:
             if isinstance(services, str):
@@ -251,7 +248,7 @@ def docker_compose_down(self, path, services=None, volumes=False, remove_orphans
 
             # Stop services
             stop_cmd = ['docker', 'compose', '-f', path, 'stop'] + services
-            subprocess.run(stop_cmd, capture_output=True, text=True, timeout=120)
+            stop_result = subprocess.run(stop_cmd, capture_output=True, text=True, timeout=120)
 
             # Remove services
             rm_cmd = ['docker', 'compose', '-f', path, 'rm', '-f'] + services
@@ -265,77 +262,77 @@ def docker_compose_down(self, path, services=None, volumes=False, remove_orphans
             if remove_orphans:
                 cmd.append('--remove-orphans')
             result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
-
-        return {
-            'status': 'success',
-            'stdout': result.stdout,
-            'stderr': result.stderr,
-            'return_code': result.returncode
-        }
     except subprocess.TimeoutExpired:
-        return {
-            'status': 'error',
-            'message': 'Docker compose down timed out (300s)'
-        }
-    except Exception as e:
-        return {
-            'status': 'error',
-            'message': str(e)
-        }
+        raise Exception('Docker compose down timed out (300s)')
+
+    # Kiểm tra return code và raise exception nếu lỗi
+    if result.returncode != 0:
+        raise Exception(f"Docker compose down failed: {result.stderr}")
+
+    return {
+        'status': 'success',
+        'stdout': result.stdout,
+        'stderr': result.stderr,
+        'return_code': result.returncode
+    }
 
 
 @app.task(bind=True)
 def docker_compose_ps(self, path):
     """Liệt kê containers của docker-compose"""
-    try:
-        # Expand ~ thành home directory
-        path = os.path.expanduser(path)
-        cmd = ['docker', 'compose', '-f', path, 'ps']
+    # Expand ~ thành home directory
+    path = os.path.expanduser(path)
+    cmd = ['docker', 'compose', '-f', path, 'ps']
 
+    try:
         result = subprocess.run(
             cmd,
             capture_output=True,
             text=True,
             timeout=60
         )
-        return {
-            'status': 'success',
-            'output': result.stdout,
-            'stderr': result.stderr,
-            'return_code': result.returncode
-        }
-    except Exception as e:
-        return {
-            'status': 'error',
-            'message': str(e)
-        }
+    except subprocess.TimeoutExpired:
+        raise Exception('Docker compose ps timed out (60s)')
+
+    # Kiểm tra return code và raise exception nếu lỗi
+    if result.returncode != 0:
+        raise Exception(f"Docker compose ps failed: {result.stderr}")
+
+    return {
+        'status': 'success',
+        'output': result.stdout,
+        'stderr': result.stderr,
+        'return_code': result.returncode
+    }
 
 
 @app.task(bind=True)
 def docker_compose_logs(self, path, service=None, tail=100):
     """Lấy logs từ docker-compose"""
+    # Expand ~ thành home directory
+    path = os.path.expanduser(path)
+    cmd = ['docker', 'compose', '-f', path, 'logs', '--tail', str(tail)]
+
+    if service:
+        cmd.append(service)
+
     try:
-        # Expand ~ thành home directory
-        path = os.path.expanduser(path)
-        cmd = ['docker', 'compose', '-f', path, 'logs', '--tail', str(tail)]
-
-        if service:
-            cmd.append(service)
-
         result = subprocess.run(
             cmd,
             capture_output=True,
             text=True,
             timeout=60
         )
-        return {
-            'status': 'success',
-            'output': result.stdout,
-            'stderr': result.stderr,
-            'return_code': result.returncode
-        }
-    except Exception as e:
-        return {
-            'status': 'error',
-            'message': str(e)
-        }
+    except subprocess.TimeoutExpired:
+        raise Exception('Docker compose logs timed out (60s)')
+
+    # Kiểm tra return code và raise exception nếu lỗi
+    if result.returncode != 0:
+        raise Exception(f"Docker compose logs failed: {result.stderr}")
+
+    return {
+        'status': 'success',
+        'output': result.stdout,
+        'stderr': result.stderr,
+        'return_code': result.returncode
+    }
