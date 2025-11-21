@@ -162,8 +162,16 @@ def docker_ps(self, all_containers=False):
 
 
 @app.task(bind=True)
-def docker_compose_up(self, path, detach=True, build=False, force_recreate=False):
-    """Chạy docker-compose up với path được chỉ định"""
+def docker_compose_up(self, path, services=None, detach=True, build=False, force_recreate=False):
+    """Chạy docker-compose up với path được chỉ định
+
+    Args:
+        path: Đường dẫn file docker-compose.yml
+        services: Service cụ thể hoặc list services (vd: 'spark-master' hoặc ['spark-master', 'spark-worker'])
+        detach: Chạy ở chế độ background
+        build: Build images trước khi start
+        force_recreate: Force recreate containers
+    """
     try:
         # Expand ~ thành home directory
         path = os.path.expanduser(path)
@@ -177,6 +185,13 @@ def docker_compose_up(self, path, detach=True, build=False, force_recreate=False
 
         if force_recreate:
             cmd.append('--force-recreate')
+
+        # Thêm services vào cuối command
+        if services:
+            if isinstance(services, str):
+                cmd.append(services)
+            elif isinstance(services, list):
+                cmd.extend(services)
 
         result = subprocess.run(
             cmd,
@@ -203,25 +218,41 @@ def docker_compose_up(self, path, detach=True, build=False, force_recreate=False
 
 
 @app.task(bind=True)
-def docker_compose_down(self, path, volumes=False, remove_orphans=False):
-    """Dừng và xóa containers với docker-compose down"""
+def docker_compose_down(self, path, services=None, volumes=False, remove_orphans=False):
+    """Dừng và xóa containers với docker-compose down
+
+    Args:
+        path: Đường dẫn file docker-compose.yml
+        services: Service cụ thể hoặc list services (để trống = tất cả)
+        volumes: Xóa volumes
+        remove_orphans: Xóa orphan containers
+    """
     try:
         # Expand ~ thành home directory
         path = os.path.expanduser(path)
-        cmd = ['docker', 'compose', '-f', path, 'down']
 
-        if volumes:
-            cmd.append('-v')
+        # Nếu có services cụ thể, dùng stop + rm thay vì down
+        if services:
+            if isinstance(services, str):
+                services = [services]
 
-        if remove_orphans:
-            cmd.append('--remove-orphans')
+            # Stop services
+            stop_cmd = ['docker', 'compose', '-f', path, 'stop'] + services
+            subprocess.run(stop_cmd, capture_output=True, text=True, timeout=120)
 
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            timeout=300
-        )
+            # Remove services
+            rm_cmd = ['docker', 'compose', '-f', path, 'rm', '-f'] + services
+            if volumes:
+                rm_cmd.insert(5, '-v')
+            result = subprocess.run(rm_cmd, capture_output=True, text=True, timeout=120)
+        else:
+            cmd = ['docker', 'compose', '-f', path, 'down']
+            if volumes:
+                cmd.append('-v')
+            if remove_orphans:
+                cmd.append('--remove-orphans')
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+
         return {
             'status': 'success',
             'stdout': result.stdout,

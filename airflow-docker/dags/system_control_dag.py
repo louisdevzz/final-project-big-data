@@ -69,23 +69,37 @@ def task_docker_compose_up(**context):
     """Task chạy docker-compose up"""
     params = context['params']
     path = params.get('compose_path', '/path/to/docker-compose.yml')
+    services = params.get('services', None)
     detach = params.get('detach', True)
     build = params.get('build', False)
     force_recreate = params.get('force_recreate', False)
 
-    result = docker_compose_up.delay(path, detach, build, force_recreate)
-    return {'task_id': result.id, 'compose_path': path}
+    # Parse services nếu là string
+    if services and isinstance(services, str) and services.strip():
+        services = [s.strip() for s in services.split(',')]
+    else:
+        services = None
+
+    result = docker_compose_up.delay(path, services, detach, build, force_recreate)
+    return {'task_id': result.id, 'compose_path': path, 'services': services}
 
 
 def task_docker_compose_down(**context):
     """Task chạy docker-compose down"""
     params = context['params']
     path = params.get('compose_path', '/path/to/docker-compose.yml')
+    services = params.get('services', None)
     volumes = params.get('remove_volumes', False)
     remove_orphans = params.get('remove_orphans', False)
 
-    result = docker_compose_down.delay(path, volumes, remove_orphans)
-    return {'task_id': result.id, 'compose_path': path}
+    # Parse services nếu là string
+    if services and isinstance(services, str) and services.strip():
+        services = [s.strip() for s in services.split(',')]
+    else:
+        services = None
+
+    result = docker_compose_down.delay(path, services, volumes, remove_orphans)
+    return {'task_id': result.id, 'compose_path': path, 'services': services}
 
 
 def task_docker_compose_ps(**context):
@@ -160,12 +174,13 @@ with DAG(
     tags=['docker', 'compose'],
     params={
         'compose_path': Param('/path/to/docker-compose.yml', type='string', description='Đường dẫn file docker-compose.yml'),
+        'services': Param('', type='string', description='Services cụ thể (vd: spark-master,spark-worker). Để trống = tất cả'),
         'detach': Param(True, type='boolean', description='Chạy ở chế độ detached'),
         'build': Param(False, type='boolean', description='Build images trước khi start'),
         'force_recreate': Param(False, type='boolean', description='Force recreate containers'),
         'remove_volumes': Param(False, type='boolean', description='Xóa volumes khi down'),
         'remove_orphans': Param(False, type='boolean', description='Xóa orphan containers'),
-        'service': Param('', type='string', description='Tên service (để trống = tất cả)'),
+        'service': Param('', type='string', description='Service cho logs (để trống = tất cả)'),
         'tail': Param(100, type='integer', description='Số dòng logs'),
     }
 ) as dag_compose:
