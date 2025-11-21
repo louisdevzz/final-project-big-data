@@ -179,6 +179,8 @@ docker-compose run airflow-cli airflow dags list
 # Restart a service
 docker-compose restart airflow-worker
 
+docker-compose restart airflow-dag-processor
+
 # Clean up (remove volumes)
 docker-compose down -v
 ```

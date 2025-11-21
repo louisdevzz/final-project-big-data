@@ -1,5 +1,5 @@
 # system_control_dag.py
-# DAG điều khiển hệ thống: tạo file, chạy script, quản lý Docker
+# DAG điều khiển Docker và Docker Compose
 
 from airflow import DAG
 from airflow.operators.python import PythonOperator
@@ -8,47 +8,18 @@ from datetime import datetime
 
 # Import tasks từ system_worker
 from mycelery.system_worker import (
-    create_file,
-    run_script,
-    run_command,
     docker_run,
     docker_stop,
     docker_remove,
     docker_ps,
-    list_files,
-    delete_file
+    docker_compose_up,
+    docker_compose_down,
+    docker_compose_ps,
+    docker_compose_logs
 )
 
 
 # ============== TASK FUNCTIONS ==============
-
-def task_create_file(**context):
-    """Task tạo file"""
-    params = context['params']
-    file_path = params.get('file_path', '/tmp/test_file.txt')
-    content = params.get('content', 'Hello from Airflow!')
-
-    result = create_file.delay(file_path, content)
-    return {'task_id': result.id, 'file_path': file_path}
-
-
-def task_run_script(**context):
-    """Task chạy script"""
-    params = context['params']
-    script_path = params.get('script_path', '/tmp/test_script.py')
-
-    result = run_script.delay(script_path)
-    return {'task_id': result.id, 'script_path': script_path}
-
-
-def task_run_command(**context):
-    """Task chạy lệnh shell"""
-    params = context['params']
-    command = params.get('command', 'echo "Hello from Celery!"')
-
-    result = run_command.delay(command)
-    return {'task_id': result.id, 'command': command}
-
 
 def task_docker_run(**context):
     """Task chạy Docker container"""
@@ -56,6 +27,12 @@ def task_docker_run(**context):
     image = params.get('image', 'hello-world')
     container_name = params.get('container_name', None)
     ports = params.get('ports', None)
+
+    # Parse ports nếu là string
+    if ports and isinstance(ports, str) and ports.strip():
+        ports = [p.strip() for p in ports.split(',')]
+    else:
+        ports = None
 
     result = docker_run.delay(image, container_name, ports)
     return {'task_id': result.id, 'image': image}
@@ -70,6 +47,15 @@ def task_docker_stop(**context):
     return {'task_id': result.id, 'container_name': container_name}
 
 
+def task_docker_remove(**context):
+    """Task xóa Docker container"""
+    params = context['params']
+    container_name = params.get('container_name', '')
+
+    result = docker_remove.delay(container_name)
+    return {'task_id': result.id, 'container_name': container_name}
+
+
 def task_docker_ps(**context):
     """Task liệt kê Docker containers"""
     params = context['params']
@@ -79,83 +65,65 @@ def task_docker_ps(**context):
     return {'task_id': result.id}
 
 
-def task_list_files(**context):
-    """Task liệt kê files"""
+def task_docker_compose_up(**context):
+    """Task chạy docker-compose up"""
     params = context['params']
-    directory = params.get('directory', '/tmp')
+    path = params.get('compose_path', '/path/to/docker-compose.yml')
+    detach = params.get('detach', True)
+    build = params.get('build', False)
+    force_recreate = params.get('force_recreate', False)
 
-    result = list_files.delay(directory)
-    return {'task_id': result.id, 'directory': directory}
+    result = docker_compose_up.delay(path, detach, build, force_recreate)
+    return {'task_id': result.id, 'compose_path': path}
 
 
-# ============== DAG 1: File Operations ==============
+def task_docker_compose_down(**context):
+    """Task chạy docker-compose down"""
+    params = context['params']
+    path = params.get('compose_path', '/path/to/docker-compose.yml')
+    volumes = params.get('remove_volumes', False)
+    remove_orphans = params.get('remove_orphans', False)
+
+    result = docker_compose_down.delay(path, volumes, remove_orphans)
+    return {'task_id': result.id, 'compose_path': path}
+
+
+def task_docker_compose_ps(**context):
+    """Task liệt kê containers của docker-compose"""
+    params = context['params']
+    path = params.get('compose_path', '/path/to/docker-compose.yml')
+
+    result = docker_compose_ps.delay(path)
+    return {'task_id': result.id, 'compose_path': path}
+
+
+def task_docker_compose_logs(**context):
+    """Task lấy logs từ docker-compose"""
+    params = context['params']
+    path = params.get('compose_path', '/path/to/docker-compose.yml')
+    service = params.get('service', None)
+    tail = params.get('tail', 100)
+
+    if service and isinstance(service, str) and not service.strip():
+        service = None
+
+    result = docker_compose_logs.delay(path, service, tail)
+    return {'task_id': result.id, 'compose_path': path}
+
+
+# ============== DAG 1: Docker Container Management ==============
 
 with DAG(
-    dag_id='system_file_operations',
-    description='DAG quản lý file: tạo, xóa, liệt kê files',
+    dag_id='docker_container_management',
+    description='DAG quản lý Docker containers: run, stop, remove, list',
     start_date=datetime(2024, 1, 1),
     schedule=None,
     catchup=False,
-    tags=['system', 'file'],
-    params={
-        'file_path': Param('/tmp/airflow_test.txt', type='string', description='Đường dẫn file'),
-        'content': Param('Hello from Airflow DAG!', type='string', description='Nội dung file'),
-        'directory': Param('/tmp', type='string', description='Thư mục cần liệt kê'),
-    }
-) as dag_file:
-
-    create_file_task = PythonOperator(
-        task_id='create_file',
-        python_callable=task_create_file,
-    )
-
-    list_files_task = PythonOperator(
-        task_id='list_files',
-        python_callable=task_list_files,
-    )
-
-    create_file_task >> list_files_task
-
-
-# ============== DAG 2: Script Execution ==============
-
-with DAG(
-    dag_id='system_script_execution',
-    description='DAG chạy script và lệnh shell',
-    start_date=datetime(2024, 1, 1),
-    schedule=None,
-    catchup=False,
-    tags=['system', 'script'],
-    params={
-        'script_path': Param('/tmp/test_script.py', type='string', description='Đường dẫn script'),
-        'command': Param('echo "Hello World"', type='string', description='Lệnh shell'),
-    }
-) as dag_script:
-
-    run_command_task = PythonOperator(
-        task_id='run_command',
-        python_callable=task_run_command,
-    )
-
-    run_script_task = PythonOperator(
-        task_id='run_script',
-        python_callable=task_run_script,
-    )
-
-
-# ============== DAG 3: Docker Management ==============
-
-with DAG(
-    dag_id='system_docker_management',
-    description='DAG quản lý Docker containers',
-    start_date=datetime(2024, 1, 1),
-    schedule=None,
-    catchup=False,
-    tags=['system', 'docker'],
+    tags=['docker', 'container'],
     params={
         'image': Param('hello-world', type='string', description='Docker image'),
         'container_name': Param('', type='string', description='Tên container'),
-        'ports': Param('', type='string', description='Port mapping (vd: 8080:80)'),
+        'ports': Param('', type='string', description='Port mapping (vd: 8080:80,3000:3000)'),
         'all_containers': Param(False, type='boolean', description='Hiển thị tất cả containers'),
     }
 ) as dag_docker:
@@ -175,57 +143,104 @@ with DAG(
         python_callable=task_docker_stop,
     )
 
-
-# ============== DAG 4: Demo Pipeline ==============
-
-def task_create_demo_script(**context):
-    """Tạo script demo"""
-    script_content = '''
-import datetime
-print(f"Script executed at: {datetime.datetime.now()}")
-print("Hello from demo script!")
-for i in range(5):
-    print(f"Processing step {i+1}...")
-print("Done!")
-'''
-    result = create_file.delay('/tmp/demo_script.py', script_content)
-    return {'task_id': result.id}
+    docker_remove_task = PythonOperator(
+        task_id='docker_remove_container',
+        python_callable=task_docker_remove,
+    )
 
 
-def task_run_demo_script(**context):
-    """Chạy script demo"""
-    result = run_script.delay('/tmp/demo_script.py')
-    return {'task_id': result.id}
-
-
-def task_cleanup_demo(**context):
-    """Cleanup sau khi chạy xong"""
-    result = delete_file.delay('/tmp/demo_script.py')
-    return {'task_id': result.id}
-
+# ============== DAG 2: Docker Compose Management ==============
 
 with DAG(
-    dag_id='system_demo_pipeline',
-    description='DAG demo: tạo script -> chạy script -> cleanup',
+    dag_id='docker_compose_management',
+    description='DAG quản lý Docker Compose: up, down, ps, logs',
     start_date=datetime(2024, 1, 1),
     schedule=None,
     catchup=False,
-    tags=['system', 'demo'],
-) as dag_demo:
+    tags=['docker', 'compose'],
+    params={
+        'compose_path': Param('/path/to/docker-compose.yml', type='string', description='Đường dẫn file docker-compose.yml'),
+        'detach': Param(True, type='boolean', description='Chạy ở chế độ detached'),
+        'build': Param(False, type='boolean', description='Build images trước khi start'),
+        'force_recreate': Param(False, type='boolean', description='Force recreate containers'),
+        'remove_volumes': Param(False, type='boolean', description='Xóa volumes khi down'),
+        'remove_orphans': Param(False, type='boolean', description='Xóa orphan containers'),
+        'service': Param('', type='string', description='Tên service (để trống = tất cả)'),
+        'tail': Param(100, type='integer', description='Số dòng logs'),
+    }
+) as dag_compose:
 
-    step1_create = PythonOperator(
-        task_id='step1_create_script',
-        python_callable=task_create_demo_script,
+    compose_up_task = PythonOperator(
+        task_id='docker_compose_up',
+        python_callable=task_docker_compose_up,
     )
 
-    step2_run = PythonOperator(
-        task_id='step2_run_script',
-        python_callable=task_run_demo_script,
+    compose_down_task = PythonOperator(
+        task_id='docker_compose_down',
+        python_callable=task_docker_compose_down,
     )
 
-    step3_cleanup = PythonOperator(
-        task_id='step3_cleanup',
-        python_callable=task_cleanup_demo,
+    compose_ps_task = PythonOperator(
+        task_id='docker_compose_ps',
+        python_callable=task_docker_compose_ps,
     )
 
-    step1_create >> step2_run >> step3_cleanup
+    compose_logs_task = PythonOperator(
+        task_id='docker_compose_logs',
+        python_callable=task_docker_compose_logs,
+    )
+
+
+# ============== DAG 3: Docker Compose Pipeline ==============
+
+with DAG(
+    dag_id='docker_compose_pipeline',
+    description='Pipeline: kiểm tra status -> up -> kiểm tra lại',
+    start_date=datetime(2024, 1, 1),
+    schedule=None,
+    catchup=False,
+    tags=['docker', 'compose', 'pipeline'],
+    params={
+        'compose_path': Param('/path/to/docker-compose.yml', type='string', description='Đường dẫn file docker-compose.yml'),
+        'build': Param(False, type='boolean', description='Build images trước khi start'),
+    }
+) as dag_compose_pipeline:
+
+    def task_compose_check_before(**context):
+        """Kiểm tra status trước khi up"""
+        params = context['params']
+        path = params.get('compose_path')
+        result = docker_compose_ps.delay(path)
+        return {'task_id': result.id, 'step': 'check_before'}
+
+    def task_compose_start(**context):
+        """Start docker-compose"""
+        params = context['params']
+        path = params.get('compose_path')
+        build = params.get('build', False)
+        result = docker_compose_up.delay(path, detach=True, build=build)
+        return {'task_id': result.id, 'step': 'start'}
+
+    def task_compose_check_after(**context):
+        """Kiểm tra status sau khi up"""
+        params = context['params']
+        path = params.get('compose_path')
+        result = docker_compose_ps.delay(path)
+        return {'task_id': result.id, 'step': 'check_after'}
+
+    step1_check = PythonOperator(
+        task_id='step1_check_status',
+        python_callable=task_compose_check_before,
+    )
+
+    step2_start = PythonOperator(
+        task_id='step2_compose_up',
+        python_callable=task_compose_start,
+    )
+
+    step3_verify = PythonOperator(
+        task_id='step3_verify_status',
+        python_callable=task_compose_check_after,
+    )
+
+    step1_check >> step2_start >> step3_verify

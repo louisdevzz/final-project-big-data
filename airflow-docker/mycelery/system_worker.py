@@ -17,53 +17,6 @@ app.conf.update(
     enable_utc=True,
 )
 
-
-@app.task(bind=True)
-def create_file(self, file_path, content):
-    """Tạo file với nội dung được chỉ định"""
-    try:
-        with open(file_path, 'w') as f:
-            f.write(content)
-        return {
-            'status': 'success',
-            'message': f'File created: {file_path}',
-            'file_path': file_path
-        }
-    except Exception as e:
-        return {
-            'status': 'error',
-            'message': str(e)
-        }
-
-
-@app.task(bind=True)
-def run_script(self, script_path):
-    """Chạy một script file"""
-    try:
-        result = subprocess.run(
-            ['python', script_path],
-            capture_output=True,
-            text=True,
-            timeout=300
-        )
-        return {
-            'status': 'success',
-            'stdout': result.stdout,
-            'stderr': result.stderr,
-            'return_code': result.returncode
-        }
-    except subprocess.TimeoutExpired:
-        return {
-            'status': 'error',
-            'message': 'Script execution timed out (300s)'
-        }
-    except Exception as e:
-        return {
-            'status': 'error',
-            'message': str(e)
-        }
-
-
 @app.task(bind=True)
 def run_command(self, command):
     """Chạy một lệnh shell"""
@@ -209,14 +162,36 @@ def docker_ps(self, all_containers=False):
 
 
 @app.task(bind=True)
-def list_files(self, directory):
-    """Liệt kê files trong thư mục"""
+def docker_compose_up(self, path, detach=True, build=False, force_recreate=False):
+    """Chạy docker-compose up với path được chỉ định"""
     try:
-        files = os.listdir(directory)
+        cmd = ['docker compose', '-f', path, 'up']
+
+        if detach:
+            cmd.append('-d')
+
+        if build:
+            cmd.append('--build')
+
+        if force_recreate:
+            cmd.append('--force-recreate')
+
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=600
+        )
         return {
             'status': 'success',
-            'files': files,
-            'count': len(files)
+            'stdout': result.stdout,
+            'stderr': result.stderr,
+            'return_code': result.returncode
+        }
+    except subprocess.TimeoutExpired:
+        return {
+            'status': 'error',
+            'message': 'Docker compose up timed out (600s)'
         }
     except Exception as e:
         return {
@@ -226,13 +201,61 @@ def list_files(self, directory):
 
 
 @app.task(bind=True)
-def delete_file(self, file_path):
-    """Xóa file"""
+def docker_compose_down(self, path, volumes=False, remove_orphans=False):
+    """Dừng và xóa containers với docker-compose down"""
     try:
-        os.remove(file_path)
+        cmd = ['docker compose', '-f', path, 'down']
+
+        if volumes:
+            cmd.append('-v')
+
+        if remove_orphans:
+            cmd.append('--remove-orphans')
+
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=300
+        )
         return {
             'status': 'success',
-            'message': f'File deleted: {file_path}'
+            'stdout': result.stdout,
+            'stderr': result.stderr,
+            'return_code': result.returncode
+        }
+    except subprocess.TimeoutExpired:
+        return {
+            'status': 'error',
+            'message': 'Docker compose down timed out (300s)'
+        }
+    except Exception as e:
+        return {
+            'status': 'error',
+            'message': str(e)
+        }
+
+
+@app.task(bind=True)
+def docker_compose_logs(self, path, service=None, tail=100):
+    """Lấy logs từ docker-compose"""
+    try:
+        cmd = ['docker compose', '-f', path, 'logs', '--tail', str(tail)]
+
+        if service:
+            cmd.append(service)
+
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=60
+        )
+        return {
+            'status': 'success',
+            'output': result.stdout,
+            'stderr': result.stderr,
+            'return_code': result.returncode
         }
     except Exception as e:
         return {
