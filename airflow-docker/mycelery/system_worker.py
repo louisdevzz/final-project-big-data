@@ -165,6 +165,8 @@ def docker_ps(self, all_containers=False):
 def docker_compose_up(self, path, detach=True, build=False, force_recreate=False):
     """Chạy docker-compose up với path được chỉ định"""
     try:
+        # Expand ~ thành home directory
+        path = os.path.expanduser(path)
         cmd = ['docker', 'compose', '-f', path, 'up']
 
         if detach:
@@ -204,6 +206,8 @@ def docker_compose_up(self, path, detach=True, build=False, force_recreate=False
 def docker_compose_down(self, path, volumes=False, remove_orphans=False):
     """Dừng và xóa containers với docker-compose down"""
     try:
+        # Expand ~ thành home directory
+        path = os.path.expanduser(path)
         cmd = ['docker', 'compose', '-f', path, 'down']
 
         if volumes:
@@ -240,6 +244,8 @@ def docker_compose_down(self, path, volumes=False, remove_orphans=False):
 def docker_compose_ps(self, path):
     """Liệt kê containers của docker-compose"""
     try:
+        # Expand ~ thành home directory
+        path = os.path.expanduser(path)
         cmd = ['docker', 'compose', '-f', path, 'ps']
 
         result = subprocess.run(
@@ -265,6 +271,8 @@ def docker_compose_ps(self, path):
 def docker_compose_logs(self, path, service=None, tail=100):
     """Lấy logs từ docker-compose"""
     try:
+        # Expand ~ thành home directory
+        path = os.path.expanduser(path)
         cmd = ['docker', 'compose', '-f', path, 'logs', '--tail', str(tail)]
 
         if service:
