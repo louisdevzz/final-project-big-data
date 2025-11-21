@@ -16,7 +16,7 @@ def trigger_celery_task():
 with DAG(
     dag_id='trigger_celery_demo',
     start_date=datetime(2024, 1, 1),
-    schedule_interval=None,
+    schedule=None,
     catchup=False
 ):
     task_trigger = PythonOperator(

@@ -188,6 +188,11 @@ docker-compose down -v
 Nếu muốn chạy Celery worker thủ công (ngoài Docker):
 
 ```bash
+# Từ thư mục airflow-docker/
+celery -A mycelery.worker.app worker --loglevel=INFO
+
+# Hoặc từ thư mục mycelery/
+cd mycelery
 celery -A worker.app worker --loglevel=INFO
 ```
 
