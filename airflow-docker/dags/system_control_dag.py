@@ -5,6 +5,7 @@ from airflow import DAG
 from airflow.operators.python import PythonOperator
 from airflow.models.param import Param
 from datetime import datetime
+import time
 
 # Import tasks từ system_worker
 from mycelery.system_worker import (
@@ -17,6 +18,25 @@ from mycelery.system_worker import (
     docker_compose_ps,
     docker_compose_logs
 )
+
+
+def wait_for_celery_result(result, timeout=60, poll_interval=2):
+    """
+    Chờ kết quả từ Celery task bằng cách polling thay vì result.get()
+    Tránh lỗi 'Never call result.get() within a task!'
+    """
+    elapsed = 0
+    while elapsed < timeout:
+        if result.ready():
+            if result.successful():
+                return result.result
+            else:
+                # Task failed
+                raise Exception(f"Celery task failed: {result.result}")
+        time.sleep(poll_interval)
+        elapsed += poll_interval
+
+    raise TimeoutError(f"Celery task {result.id} timed out after {timeout} seconds")
 
 
 # ============== TASK FUNCTIONS ==============
@@ -353,8 +373,8 @@ with DAG(
     }
 ) as dag_bigdata_start:
 
-    def start_service(service_name, **context):
-        """Khởi động một service trên node tương ứng"""
+    def start_service(service_name, timeout=300, **context):
+        """Khởi động một service trên node tương ứng và chờ kết quả"""
         config = BIGDATA_SERVICES[service_name]
 
         result = docker_compose_up.apply_async(
@@ -367,12 +387,20 @@ with DAG(
             },
             queue=config['queue']
         )
-        return {
-            'task_id': result.id,
-            'service': service_name,
-            'host': config['host'],
-            'queue': config['queue']
-        }
+
+        # Chờ kết quả từ Celery worker bằng polling
+        try:
+            output = wait_for_celery_result(result, timeout=timeout)
+            return {
+                'task_id': result.id,
+                'service': service_name,
+                'host': config['host'],
+                'queue': config['queue'],
+                'output': output,
+                'status': 'success'
+            }
+        except Exception as e:
+            raise Exception(f"Failed to start {service_name} on {config['host']}: {str(e)}")
 
     # Hadoop tasks
     def start_hadoop_namenode(**context):
@@ -450,8 +478,8 @@ with DAG(
     }
 ) as dag_bigdata_stop:
 
-    def stop_service(service_name, remove_volumes=False, **context):
-        """Dừng một service trên node tương ứng"""
+    def stop_service(service_name, remove_volumes=False, timeout=300, **context):
+        """Dừng một service trên node tương ứng và chờ kết quả"""
         config = BIGDATA_SERVICES[service_name]
 
         result = docker_compose_down.apply_async(
@@ -463,11 +491,19 @@ with DAG(
             },
             queue=config['queue']
         )
-        return {
-            'task_id': result.id,
-            'service': service_name,
-            'host': config['host'],
-        }
+
+        # Chờ kết quả từ Celery worker bằng polling
+        try:
+            output = wait_for_celery_result(result, timeout=timeout)
+            return {
+                'task_id': result.id,
+                'service': service_name,
+                'host': config['host'],
+                'output': output,
+                'status': 'success'
+            }
+        except Exception as e:
+            raise Exception(f"Failed to stop {service_name} on {config['host']}: {str(e)}")
 
     # Stop tasks
     def stop_kafka(**context):

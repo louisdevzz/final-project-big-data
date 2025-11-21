@@ -295,19 +295,19 @@ Hướng dẫn setup trên mỗi node:
 
 1. Trên máy 192.168.80.55 (Spark Master)
 
-celery -A mycelery.system_worker.app worker --loglevel=INFO -E -Q node_55
+nohup uv run celery -A mycelery.system_worker.app worker --loglevel=INFO -E -Q node_55 > output.log 2>&1 &
 
 2. Trên máy 192.168.80.53 (Spark Worker)
 
-celery -A mycelery.system_worker.app worker --loglevel=INFO -E -Q node_53
+nohup uv run celery -A mycelery.system_worker.app worker --loglevel=INFO -E -Q node_53 > output.log 2>&1 &
 
 3. Trên máy 192.168.80.57 (Hadoop Namenode + Kafka)
 
-celery -A mycelery.system_worker.app worker --loglevel=INFO -E -Q node_57
+nohup uv run celery -A mycelery.system_worker.app worker --loglevel=INFO -E -Q node_57 > output.log 2>&1 &
 
 4. Trên máy 192.168.80.87 (Hadoop Datanode)
 
-celery -A mycelery.system_worker.app worker --loglevel=INFO -E -Q node_87
+nohup uv run celery -A mycelery.system_worker.app worker --loglevel=INFO -E -Q node_87 > output.log 2>&1 &
 
 DAGs đã tạo:
 
