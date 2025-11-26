@@ -31,15 +31,20 @@ CLUSTER_NODES = {
 }
 
 @app.task(bind=True)
-def run_command(self, command):
+def run_command(self, command, env_vars=None):
     """Chạy một lệnh shell"""
     try:
+        env = os.environ.copy()
+        if env_vars:
+            env.update(env_vars)
+
         result = subprocess.run(
             command,
             shell=True,
             capture_output=True,
             text=True,
-            timeout=300
+            timeout=300,
+            env=env
         )
         return {
             'status': 'success',
