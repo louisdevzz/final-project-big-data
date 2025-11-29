@@ -224,7 +224,7 @@ BIGDATA_SERVICES = {
 
 with DAG(
     dag_id='bigdata_pipeline_start',
-    description='Pipeline khởi động Big Data cluster: Hadoop -> Spark -> Kafka',
+    description='full path from start dockers to submit to Spark',
     start_date=datetime(2024, 1, 1),
     schedule=None,
     catchup=False,
@@ -237,7 +237,6 @@ with DAG(
 ) as dag_bigdata_start:
 
     def start_service(service_name, timeout=300, **context):
-        """Khởi động một service trên node tương ứng và chờ kết quả"""
         config = BIGDATA_SERVICES[service_name]
 
         result = docker_compose_up.apply_async(
@@ -287,8 +286,13 @@ with DAG(
             return {'skipped': True}
         return start_service('spark-worker', **context)
 
-    def submit_spark_job(**context):
-        """Submit Spark job to Spark Master"""
+    # Kafka task
+    def start_kafka(**context):
+        if not context['params'].get('start_kafka', True):
+            return {'skipped': True}
+        return start_service('kafka', **context)
+
+    def prepare_data_spark(**context):
         if not context['params'].get('start_spark', True):
             return {'skipped': True}
             
@@ -321,13 +325,107 @@ with DAG(
         except Exception as e:
             raise Exception(f"Failed to submit spark job on {host}: {str(e)}")
 
-    # Kafka task
-    def start_kafka(**context):
-        if not context['params'].get('start_kafka', True):
+    def train_model_spark(**context):
+        if not context['params'].get('start_spark', True):
             return {'skipped': True}
-        return start_service('kafka', **context)
+            
+        command = "~/spark/bin/spark-submit --master spark://192.168.80.55:7077 ~/bd/task_list/train_model.py"
+        # Spark master info
+        queue = 'node_55' 
+        host = '192.168.80.55'
+        
+        # Set JAVA_HOME to Java 17 for Spark
+        env_vars = {
+            'JAVA_HOME': '/usr/lib/jvm/java-17-openjdk-amd64',
+            'PATH': '/usr/lib/jvm/java-17-openjdk-amd64/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin'
+        }
+        
+        result = run_command.apply_async(
+            args=[command],
+            kwargs={'env_vars': env_vars},
+            queue=queue
+        )
+        
+        try:
+            output = wait_for_celery_result(result, timeout=600) # Spark jobs might take longer
+            return {
+                'task_id': result.id,
+                'command': command,
+                'host': host,
+                'output': output,
+                'status': 'success'
+            }
+        except Exception as e:
+            raise Exception(f"Failed to submit spark job on {host}: {str(e)}")
+    
+    def streaming_data(**context):
+        if not context['params'].get('start_spark', True):
+            return {'skipped': True}
+            
+        command = "~/spark/bin/spark-submit --master spark://192.168.80.55:7077 ~/bd/task_list/kafka_producer.py"
+        # Spark master info
+        queue = 'node_55' 
+        host = '192.168.80.55'
+        
+        # Set JAVA_HOME to Java 17 for Spark
+        env_vars = {
+            'JAVA_HOME': '/usr/lib/jvm/java-17-openjdk-amd64',
+            'PATH': '/usr/lib/jvm/java-17-openjdk-amd64/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin'
+        }
+        
+        result = run_command.apply_async(
+            args=[command],
+            kwargs={'env_vars': env_vars},
+            queue=queue
+        )
+        
+        try:
+            output = wait_for_celery_result(result, timeout=600) # Spark jobs might take longer
+            return {
+                'task_id': result.id,
+                'command': command,
+                'host': host,
+                'output': output,
+                'status': 'success'
+            }
+        except Exception as e:
+            raise Exception(f"Failed to submit spark job on {host}: {str(e)}")
+    
+    def predict(**context):
+        if not context['params'].get('start_spark', True):
+            return {'skipped': True}
+            
+        command = "~/spark/bin/spark-submit --master spark://192.168.80.55:7077 ~/bd/task_list/streaming_predict.py"
+        # Spark master info
+        queue = 'node_55' 
+        host = '192.168.80.55'
+        
+        # Set JAVA_HOME to Java 17 for Spark
+        env_vars = {
+            'JAVA_HOME': '/usr/lib/jvm/java-17-openjdk-amd64',
+            'PATH': '/usr/lib/jvm/java-17-openjdk-amd64/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin'
+        }
+        
+        result = run_command.apply_async(
+            args=[command],
+            kwargs={'env_vars': env_vars},
+            queue=queue
+        )
+        
+        try:
+            output = wait_for_celery_result(result, timeout=600) # Spark jobs might take longer
+            return {
+                'task_id': result.id,
+                'command': command,
+                'host': host,
+                'output': output,
+                'status': 'success'
+            }
+        except Exception as e:
+            raise Exception(f"Failed to submit spark job on {host}: {str(e)}")
 
-    # Tạo tasks
+    # --------- Tạo tasks -------------
+
     task_hadoop_namenode = PythonOperator(
         task_id='start_hadoop_namenode',
         python_callable=start_hadoop_namenode,
@@ -348,29 +446,50 @@ with DAG(
         python_callable=start_spark_worker,
     )
 
-    task_spark_submit = PythonOperator(
-        task_id='submit_spark_job',
-        python_callable=submit_spark_job,
-    )
-
     task_kafka = PythonOperator(
         task_id='start_kafka',
         python_callable=start_kafka,
     )
 
-    # Cấu hình dependency
-    # 1. Hadoop cluster: Namenode -> Datanode
+    prepare_data_spark = PythonOperator(
+        task_id='prepare_data_spark',
+        python_callable=prepare_data_spark,
+    )
+
+    train_model_spark = PythonOperator(
+        task_id='train_model_spark',
+        python_callable=train_model_spark,
+    )
+
+    streaming_data = PythonOperator(
+        task_id='streaming_data',
+        python_callable=streaming_data,
+    )
+
+    predict = PythonOperator(
+        task_id='predict',
+        python_callable=predict,
+    )
+
+    # ----------- ----------- -------------
+
+    # hadoop
     task_hadoop_namenode >> task_hadoop_datanode
 
-    # 2. Spark cluster: Master -> Worker -> Submit Job
-    task_spark_master >> task_spark_worker >> task_spark_submit
+    # spark
+    task_spark_master >> task_spark_worker
 
-    # 3. Kafka: Độc lập
+    # kafka
     task_kafka
+
+    # full
+    [task_hadoop_datanode, task_spark_worker, task_kafka] >> prepare_data_spark >> train_model_spark >> streaming_data >> predict
+
+
+
 
 
 # ============== DAG 6: Big Data Pipeline Stop ==============
-
 with DAG(
     dag_id='bigdata_pipeline_stop',
     description='Pipeline dừng Big Data cluster',
