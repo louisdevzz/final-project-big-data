@@ -20,10 +20,6 @@ from mycelery.system_worker import (
 
 
 def wait_for_celery_result(result, timeout=60, poll_interval=2):
-    """
-    Chờ kết quả từ Celery task bằng cách polling thay vì result.get()
-    Tránh lỗi 'Never call result.get() within a task!'
-    """
     elapsed = 0
     while elapsed < timeout:
         if result.ready():
