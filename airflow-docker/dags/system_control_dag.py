@@ -479,8 +479,8 @@ with DAG(
     task_kafka
 
     # full
-    [task_hadoop_datanode, task_spark_worker, task_kafka] >> prepare_data_spark >> train_model_spark >> predict		
-    [task_hadoop_datanode, task_spark_worker, task_kafka] >> prepare_data_spark >> train_model_spark >> streaming_data 
+    [task_hadoop_datanode, task_spark_worker, task_kafka] >> prepare_data >> train_model >> predict		
+    [task_hadoop_datanode, task_spark_worker, task_kafka] >> prepare_data >> train_model>> streaming_data 
 
 
 

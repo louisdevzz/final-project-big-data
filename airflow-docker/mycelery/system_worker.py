@@ -4,8 +4,8 @@ import os
 
 app = Celery(
     'system_worker',
-    broker='redis://192.168.10.234:6379/0',
-    backend='db+postgresql://airflow:airflow@192.168.10.234/airflow'
+    broker='redis://192.168.80.55:6379/0',
+    backend='db+postgresql://airflow:airflow@192.168.80.55/airflow'
 )
 
 # Cấu hình Celery
