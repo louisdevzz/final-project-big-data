@@ -293,7 +293,7 @@ Apache License 2.0
 
 Hướng dẫn setup trên mỗi node:
 
-1. Trên máy 192.168.80.55 (Spark Master)
+1. Trên máy 192.168.80.192 (Spark Master)
 
 nohup uv run celery -A mycelery.system_worker.app worker --loglevel=INFO -E -Q node_55 > output.log 2>&1 &
 

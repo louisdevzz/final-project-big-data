@@ -186,7 +186,7 @@ with DAG(
 # Định nghĩa cấu hình các services
 BIGDATA_SERVICES = {
     'spark-master': {
-        'host': '192.168.80.55',
+        'host': '192.168.80.192',
         'queue': 'node_55',
         'path': '~/bd/spark/docker-compose.yml',
         'service': 'spark-master',
@@ -295,7 +295,7 @@ with DAG(
         command = "sh ~/bd/fp_pr_tasks/credit_card/exes/prepare.sh"
         # Spark master info
         queue = 'node_55' 
-        host = '192.168.80.55'
+        host = '192.168.80.192'
         
         # Set JAVA_HOME to Java 17 for Spark
         env_vars = {
@@ -328,7 +328,7 @@ with DAG(
         command = "sh ~/bd/fp_pr_tasks/credit_card/exes/train.sh"
         # Spark master info
         queue = 'node_55' 
-        host = '192.168.80.55'
+        host = '192.168.80.192'
         
         # Set JAVA_HOME to Java 17 for Spark
         env_vars = {
@@ -361,7 +361,7 @@ with DAG(
         command = 'sh ~/bd/fp_pr_tasks/credit_card/exes/producer.sh'
         # Spark master info
         queue = 'node_55' 
-        host = '192.168.80.55'
+        host = '192.168.80.192'
         
         # Set JAVA_HOME to Java 17 for Spark
         env_vars = {
@@ -394,7 +394,7 @@ with DAG(
         command = 'sh ~/bd/fp_pr_tasks/credit_card/exes/predict.sh'
         # Spark master info
         queue = 'node_55' 
-        host = '192.168.80.55'
+        host = '192.168.80.192'
         
         # Set JAVA_HOME to Java 17 for Spark
         env_vars = {

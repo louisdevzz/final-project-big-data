@@ -4,8 +4,8 @@ import os
 
 app = Celery(
     'system_worker',
-    broker='redis://192.168.80.55:6379/0',
-    backend='db+postgresql://airflow:airflow@192.168.80.55/airflow'
+    broker='redis://192.168.80.192:6379/0',
+    backend='db+postgresql://airflow:airflow@192.168.80.192/airflow'
 )
 
 # Cấu hình Celery
@@ -23,7 +23,7 @@ app.conf.update(
 
 # Định nghĩa các node trong cluster
 CLUSTER_NODES = {
-    'spark-master': {'host': '192.168.80.55', 'queue': 'node_55'},
+    'spark-master': {'host': '192.168.80.192', 'queue': 'node_55'},
     'spark-worker': {'host': '192.168.80.53', 'queue': 'node_53'},
     'hadoop-namenode': {'host': '192.168.80.57', 'queue': 'node_57'},
     'hadoop-datanode': {'host': '192.168.80.87', 'queue': 'node_87'},
