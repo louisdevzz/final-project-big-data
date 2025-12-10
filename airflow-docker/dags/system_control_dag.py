@@ -288,11 +288,11 @@ with DAG(
             return {'skipped': True}
         return start_service('kafka', **context)
 
-    def prepare_data_spark(**context):
+    def prepare_data(**context):
         if not context['params'].get('start_spark', True):
             return {'skipped': True}
             
-        command = "~/spark/bin/spark-submit --master spark://192.168.80.55:7077 ~/bd/task_list/prepare_data.py"
+        command = "sh ~/bd/fp_pr_tasks/credit_card/exes/prepare.sh"
         # Spark master info
         queue = 'node_55' 
         host = '192.168.80.55'
@@ -321,11 +321,11 @@ with DAG(
         except Exception as e:
             raise Exception(f"Failed to submit spark job on {host}: {str(e)}")
 
-    def train_model_spark(**context):
+    def train_model(**context):
         if not context['params'].get('start_spark', True):
             return {'skipped': True}
             
-        command = "~/spark/bin/spark-submit --master spark://192.168.80.55:7077 ~/bd/task_list/train_model.py"
+        command = "sh ~/bd/fp_pr_tasks/credit_card/exes/train.sh"
         # Spark master info
         queue = 'node_55' 
         host = '192.168.80.55'
@@ -357,8 +357,8 @@ with DAG(
     def streaming_data(**context):
         if not context['params'].get('start_spark', True):
             return {'skipped': True}
-            
-        command = "~/spark/bin/spark-submit --master spark://192.168.80.55:7077 ~/bd/task_list/kafka_producer.py"
+
+        command = 'sh ~/bd/fp_pr_tasks/credit_card/exes/producer.sh'
         # Spark master info
         queue = 'node_55' 
         host = '192.168.80.55'
@@ -391,7 +391,7 @@ with DAG(
         if not context['params'].get('start_spark', True):
             return {'skipped': True}
             
-        command = "~/spark/bin/spark-submit --master spark://192.168.80.55:7077 ~/bd/task_list/streaming_predict.py"
+        command = 'sh ~/bd/fp_pr_tasks/credit_card/exes/predict.sh'
         # Spark master info
         queue = 'node_55' 
         host = '192.168.80.55'
@@ -447,14 +447,14 @@ with DAG(
         python_callable=start_kafka,
     )
 
-    prepare_data_spark = PythonOperator(
-        task_id='prepare_data_spark',
-        python_callable=prepare_data_spark,
+    prepare_data = PythonOperator(
+        task_id='prepare_data',
+        python_callable=prepare_data,
     )
 
-    train_model_spark = PythonOperator(
-        task_id='train_model_spark',
-        python_callable=train_model_spark,
+    train_model = PythonOperator(
+        task_id='train_model',
+        python_callable=train_model,
     )
 
     streaming_data = PythonOperator(
@@ -479,7 +479,8 @@ with DAG(
     task_kafka
 
     # full
-    [task_hadoop_datanode, task_spark_worker, task_kafka] >> prepare_data_spark >> train_model_spark >> streaming_data >> predict
+    [task_hadoop_datanode, task_spark_worker, task_kafka] >> prepare_data_spark >> train_model_spark >> predict		
+    [task_hadoop_datanode, task_spark_worker, task_kafka] >> prepare_data_spark >> train_model_spark >> streaming_data 
 
 
 
