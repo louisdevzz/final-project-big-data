@@ -185,9 +185,83 @@ docker compose restart airflow-dag-processor
 docker-compose down -v
 ```
 
-### Run Celery Worker (Manual)
+## Celery Worker Management Scripts
 
-Nếu muốn chạy Celery worker thủ công (ngoài Docker):
+Hệ thống sử dụng kiến trúc **capability-based routing** cho Celery workers. Mỗi worker được cấu hình với các capabilities cụ thể (spark_master, hadoop_namenode, docker_host, v.v.) và tự động subscribe vào các queues tương ứng.
+
+### 1. `scripts/start_worker.sh`
+
+**Mục đích**: Khởi động Celery worker với cấu hình capability-based routing
+
+**Chức năng**:
+- Tự động đọc file cấu hình capabilities từ `/etc/celery/worker_capabilities.json`
+- Kiểm tra kết nối Redis broker trước khi start
+- Khởi động worker với auto queue detection (worker tự động subscribe queues dựa trên capabilities)
+- Không cần chỉ định queues thủ công - worker tự động xác định dựa trên config
+
+**Cách sử dụng**:
+```bash
+# Source environment variables
+source .env
+
+# Khởi động worker
+./scripts/start_worker.sh
+```
+
+**Worker sẽ tự động**:
+- Đọc capabilities từ config file
+- Subscribe vào các queues phù hợp (vd: spark_master, hadoop_namenode)
+- Xử lý tasks với concurrency=4, timeout=3600s
+
+**Environment variables** (trong `scripts/.env`):
+```bash
+CELERY_BROKER_URL=redis://192.168.80.192:6379/0
+CELERY_RESULT_BACKEND=redis://192.168.80.192:6379/0
+WORKER_CAPABILITIES_FILE=/etc/celery/worker_capabilities.json
+CELERY_WORKER_CONCURRENCY=4
+CELERY_WORKER_MAX_TASKS_PER_CHILD=100
+CELERY_WORKER_TIME_LIMIT=3600
+CELERY_WORKER_SOFT_TIME_LIMIT=3300
+CELERY_WORKER_LOG_LEVEL=info
+```
+
+### 2. `scripts/deploy_worker_config.sh`
+
+**Mục đích**: Deploy file cấu hình capabilities lên các remote workers
+
+**Chức năng**:
+- Deploy worker capabilities config từ `worker_configs/` lên nhiều remote hosts
+- Mapping tự động: mỗi host → config file tương ứng
+  - `192.168.80.192` → `worker_capabilities.spark_master.json`
+  - `192.168.80.53` → `worker_capabilities.spark_worker.json`
+  - `192.168.80.57` → `worker_capabilities.hadoop_namenode.json`
+  - `192.168.80.87` → `worker_capabilities.hadoop_datanode.json`
+- Tự động tạo thư mục `/etc/celery/` trên remote hosts
+- Copy và set permissions cho config files
+- Verify deployment thành công
+
+**Cách sử dụng**:
+```bash
+# Source environment variables
+source scripts/.env
+
+# Deploy configs to all remote workers
+./scripts/deploy_worker_config.sh
+
+# Script sẽ hiển thị deployment plan và yêu cầu xác nhận
+# Sau khi deploy, restart workers trên các remote hosts:
+ssh user@192.168.80.192 'cd /path/to/airflow-docker && ./scripts/start_worker.sh'
+```
+
+**Workflow deploy workers**:
+1. Tạo/chỉnh sửa config files trong `worker_configs/`
+2. Chạy `deploy_worker_config.sh` để deploy lên remote hosts
+3. Start/restart workers trên từng host bằng `start_worker.sh`
+4. Verify bằng: `celery -A mycelery.system_worker inspect active_queues`
+
+### Run Celery Worker (Manual - Legacy Method)
+
+Nếu muốn chạy Celery worker thủ công (ngoài Docker) - phương pháp cũ:
 
 ```bash
 # Từ thư mục airflow-docker/

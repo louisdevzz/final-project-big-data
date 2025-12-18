@@ -2,10 +2,14 @@ from celery import Celery
 import subprocess
 import os
 
+# Redis broker - có thể dùng env var để flexible hơn
+REDIS_BROKER = os.getenv('CELERY_BROKER_URL', 'redis://192.168.80.192:6379/0')
+CELERY_BACKEND = os.getenv('CELERY_RESULT_BACKEND', 'db+postgresql://airflow:airflow@192.168.80.192/airflow')
+
 app = Celery(
     'system_worker',
-    broker='redis://192.168.80.192:6379/0',
-    backend='db+postgresql://airflow:airflow@192.168.80.192/airflow'
+    broker=REDIS_BROKER,
+    backend=CELERY_BACKEND
 )
 
 # Cấu hình Celery
@@ -15,20 +19,16 @@ app.conf.update(
     result_serializer='json',
     timezone='Asia/Ho_Chi_Minh',
     enable_utc=True,
-    # Định nghĩa routes cho các queue khác nhau
+
+    # QUAN TRỌNG: Task routing theo CAPABILITY, không theo NODE
     task_routes={
-        'mycelery.system_worker.*': {'queue': 'system'},
-    },
+        # Docker operations -> bất kỳ worker nào có docker_host capability
+        'mycelery.system_worker.docker_*': {'queue': 'docker_host'},
+    }
 )
 
-# Định nghĩa các node trong cluster
-CLUSTER_NODES = {
-    'spark-master': {'host': '192.168.80.192', 'queue': 'node_55'},
-    'spark-worker': {'host': '192.168.80.53', 'queue': 'node_53'},
-    'hadoop-namenode': {'host': '192.168.80.57', 'queue': 'node_57'},
-    'hadoop-datanode': {'host': '192.168.80.87', 'queue': 'node_87'},
-    'kafka': {'host': '192.168.80.57', 'queue': 'node_57'},
-}
+# Load celery config để auto-detect queues
+app.config_from_object('mycelery.celeryconfig')
 
 @app.task(bind=True)
 def run_command(self, command, env_vars=None):

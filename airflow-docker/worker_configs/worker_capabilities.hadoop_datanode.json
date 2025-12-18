@@ -1,0 +1,9 @@
+{
+  "worker_name": "hadoop-datanode-worker",
+  "capabilities": [
+    "hadoop_datanode",
+    "docker_host"
+  ],
+  "description": "Hadoop Datanode - handles HDFS data storage",
+  "note": "Deploy this config to the machine that will run Hadoop Datanode (e.g., 192.168.80.87)"
+}

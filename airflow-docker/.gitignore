@@ -96,3 +96,6 @@ standalone_admin_password.txt
 # OS
 .DS_Store
 Thumbs.db
+
+/.claude
+/.DS_Store

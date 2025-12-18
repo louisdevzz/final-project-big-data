@@ -1,0 +1,9 @@
+{
+  "worker_name": "spark-worker-worker",
+  "capabilities": [
+    "spark_worker",
+    "docker_host"
+  ],
+  "description": "Spark Worker node - handles worker services and distributed processing",
+  "note": "Deploy this config to the machine that will run Spark Worker (e.g., 192.168.80.53)"
+}

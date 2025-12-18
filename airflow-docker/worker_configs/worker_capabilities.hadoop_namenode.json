@@ -1,0 +1,10 @@
+{
+  "worker_name": "hadoop-namenode-worker",
+  "capabilities": [
+    "hadoop_namenode",
+    "kafka",
+    "docker_host"
+  ],
+  "description": "Hadoop Namenode + Kafka node - handles HDFS metadata and Kafka broker",
+  "note": "Deploy this config to the machine that will run Hadoop Namenode and Kafka (e.g., 192.168.80.57)"
+}

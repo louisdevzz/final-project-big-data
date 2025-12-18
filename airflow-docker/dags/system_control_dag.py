@@ -2,7 +2,6 @@ from airflow import DAG
 from airflow.providers.standard.operators.python import PythonOperator
 from airflow.sdk import Param
 from datetime import datetime
-import os
 import time
 
 # Import tasks từ system_worker
@@ -183,38 +182,49 @@ with DAG(
 # ============== DAG 5: Big Data Pipeline ==============
 # Pipeline chạy trên nhiều node khác nhau
 
-# Định nghĩa cấu hình các services
+# ============== CAPABILITY-BASED SERVICE CONFIGURATION ==============
+# Không còn hardcode host/IP nữa
+# Chỉ định nghĩa NĂNG LỰC cần thiết và cấu hình service
+
 BIGDATA_SERVICES = {
     'spark-master': {
-        'host': '192.168.80.192',
-        'queue': 'node_55',
+        'capability': 'spark_master',  # Queue name dựa trên capability
         'path': '~/bd/spark/docker-compose.yml',
         'service': 'spark-master',
+        'description': 'Spark Master service - requires spark_master capability',
     },
     'spark-worker': {
-        'host': '192.168.80.53',
-        'queue': 'node_53',
+        'capability': 'spark_worker',
         'path': '~/bd/spark/docker-compose.yml',
         'service': 'spark-worker',
+        'description': 'Spark Worker service - requires spark_worker capability',
     },
     'hadoop-namenode': {
-        'host': '192.168.80.57',
-        'queue': 'node_57',
+        'capability': 'hadoop_namenode',
         'path': '~/bd/hadoop/docker-compose.namenode.yml',
         'service': None,  # Chạy tất cả services trong file
+        'description': 'Hadoop Namenode - requires hadoop_namenode capability',
     },
     'hadoop-datanode': {
-        'host': '192.168.80.87',
-        'queue': 'node_87',
+        'capability': 'hadoop_datanode',
         'path': '~/bd/hadoop/docker-compose.datanode.yml',
         'service': None,
+        'description': 'Hadoop Datanode - requires hadoop_datanode capability',
     },
     'kafka': {
-        'host': '192.168.80.57',
-        'queue': 'node_57',
+        'capability': 'kafka',
         'path': '~/bd/kafka/docker-compose.yml',
         'service': None,
+        'description': 'Kafka broker - requires kafka capability',
     },
+}
+
+# Mapping giữa service role và capability cần thiết cho command execution
+COMMAND_CAPABILITIES = {
+    'spark_submit': 'spark_master',  # Spark submit commands chạy trên master
+    'spark_common': 'spark_common',   # Commands chạy trên bất kỳ spark node nào
+    'hadoop_admin': 'hadoop_namenode',
+    'kafka_admin': 'kafka',
 }
 
 
@@ -233,6 +243,10 @@ with DAG(
 ) as dag_bigdata_start:
 
     def start_service(service_name, timeout=300, **context):
+        """
+        Khởi động service dựa trên CAPABILITY, không hardcode host
+        Worker nào có capability phù hợp sẽ tự động nhận task
+        """
         config = BIGDATA_SERVICES[service_name]
 
         result = docker_compose_up.apply_async(
@@ -243,7 +257,7 @@ with DAG(
                 'build': False,
                 'force_recreate': False,
             },
-            queue=config['queue']
+            queue=config['capability']  # ✅ Route theo capability, không phải node
         )
 
         # Chờ kết quả từ Celery worker bằng polling
@@ -252,13 +266,13 @@ with DAG(
             return {
                 'task_id': result.id,
                 'service': service_name,
-                'host': config['host'],
-                'queue': config['queue'],
+                'capability': config['capability'],  # Ghi nhận capability, không phải host
+                'description': config['description'],
                 'output': output,
                 'status': 'success'
             }
         except Exception as e:
-            raise Exception(f"Failed to start {service_name} on {config['host']}: {str(e)}")
+            raise Exception(f"Failed to start {service_name} (requires {config['capability']}): {str(e)}")
 
     # Hadoop tasks
     def start_hadoop_namenode(**context):
@@ -291,134 +305,123 @@ with DAG(
     def prepare_data(**context):
         if not context['params'].get('start_spark', True):
             return {'skipped': True}
-            
+
         command = "sh ~/bd/fp_pr_tasks/credit_card/exes/prepare.sh"
-        # Spark master info
-        queue = 'node_55' 
-        host = '192.168.80.192'
-        
+
         # Set JAVA_HOME to Java 17 for Spark
         env_vars = {
             'JAVA_HOME': '/usr/lib/jvm/java-17-openjdk-amd64',
             'PATH': '/usr/lib/jvm/java-17-openjdk-amd64/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin'
         }
-        
+
+        # ✅ Route theo capability: spark_master (không hardcode queue/host)
         result = run_command.apply_async(
             args=[command],
             kwargs={'env_vars': env_vars},
-            queue=queue
+            queue='spark_master'  # Worker nào có spark_master capability sẽ nhận
         )
-        
+
         try:
             output = wait_for_celery_result(result, timeout=600) # Spark jobs might take longer
             return {
                 'task_id': result.id,
                 'command': command,
-                'host': host,
+                'capability': 'spark_master',
                 'output': output,
                 'status': 'success'
             }
         except Exception as e:
-            raise Exception(f"Failed to submit spark job on {host}: {str(e)}")
+            raise Exception(f"Failed to submit spark job (requires spark_master capability): {str(e)}")
 
     def train_model(**context):
         if not context['params'].get('start_spark', True):
             return {'skipped': True}
-            
+
         command = "sh ~/bd/fp_pr_tasks/credit_card/exes/train.sh"
-        # Spark master info
-        queue = 'node_55' 
-        host = '192.168.80.192'
-        
+
         # Set JAVA_HOME to Java 17 for Spark
         env_vars = {
             'JAVA_HOME': '/usr/lib/jvm/java-17-openjdk-amd64',
             'PATH': '/usr/lib/jvm/java-17-openjdk-amd64/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin'
         }
-        
+
         result = run_command.apply_async(
             args=[command],
             kwargs={'env_vars': env_vars},
-            queue=queue
+            queue='spark_master'
         )
-        
+
         try:
-            output = wait_for_celery_result(result, timeout=600) # Spark jobs might take longer
+            output = wait_for_celery_result(result, timeout=600)
             return {
                 'task_id': result.id,
                 'command': command,
-                'host': host,
+                'capability': 'spark_master',
                 'output': output,
                 'status': 'success'
             }
         except Exception as e:
-            raise Exception(f"Failed to submit spark job on {host}: {str(e)}")
+            raise Exception(f"Failed to submit spark job (requires spark_master capability): {str(e)}")
     
     def streaming_data(**context):
         if not context['params'].get('start_spark', True):
             return {'skipped': True}
 
         command = 'sh ~/bd/fp_pr_tasks/credit_card/exes/producer.sh'
-        # Spark master info
-        queue = 'node_55' 
-        host = '192.168.80.192'
-        
+
         # Set JAVA_HOME to Java 17 for Spark
         env_vars = {
             'JAVA_HOME': '/usr/lib/jvm/java-17-openjdk-amd64',
             'PATH': '/usr/lib/jvm/java-17-openjdk-amd64/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin'
         }
-        
+
         result = run_command.apply_async(
             args=[command],
             kwargs={'env_vars': env_vars},
-            queue=queue
+            queue='spark_master'
         )
-        
+
         try:
-            output = wait_for_celery_result(result, timeout=600) # Spark jobs might take longer
+            output = wait_for_celery_result(result, timeout=600)
             return {
                 'task_id': result.id,
                 'command': command,
-                'host': host,
+                'capability': 'spark_master',
                 'output': output,
                 'status': 'success'
             }
         except Exception as e:
-            raise Exception(f"Failed to submit spark job on {host}: {str(e)}")
+            raise Exception(f"Failed to submit spark job (requires spark_master capability): {str(e)}")
     
     def predict(**context):
         if not context['params'].get('start_spark', True):
             return {'skipped': True}
-            
+
         command = 'sh ~/bd/fp_pr_tasks/credit_card/exes/predict.sh'
-        # Spark master info
-        queue = 'node_55' 
-        host = '192.168.80.192'
-        
+
         # Set JAVA_HOME to Java 17 for Spark
         env_vars = {
             'JAVA_HOME': '/usr/lib/jvm/java-17-openjdk-amd64',
             'PATH': '/usr/lib/jvm/java-17-openjdk-amd64/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin'
         }
-        
+
         result = run_command.apply_async(
             args=[command],
             kwargs={'env_vars': env_vars},
-            queue=queue
+            queue='spark_master'
         )
-        
+
         try:
-            output = wait_for_celery_result(result, timeout=600) # Spark jobs might take longer
+            output = wait_for_celery_result(result, timeout=600)
             return {
                 'task_id': result.id,
                 'command': command,
-                'host': host,
+                'capability': 'spark_master',
                 'output': output,
                 'status': 'success'
             }
         except Exception as e:
-            raise Exception(f"Failed to submit spark job on {host}: {str(e)}")
+            raise Exception(f"Failed to submit spark job (requires spark_master capability): {str(e)}")
 
     # --------- Tạo tasks -------------
 
@@ -503,7 +506,10 @@ with DAG(
 ) as dag_bigdata_stop:
 
     def stop_service(service_name, remove_volumes=False, timeout=300, **context):
-        """Dừng một service trên node tương ứng và chờ kết quả"""
+        """
+        Dừng service dựa trên CAPABILITY
+        Worker nào có capability phù hợp sẽ tự động nhận task
+        """
         config = BIGDATA_SERVICES[service_name]
 
         result = docker_compose_down.apply_async(
@@ -513,7 +519,7 @@ with DAG(
                 'volumes': remove_volumes,
                 'remove_orphans': False,
             },
-            queue=config['queue']
+            queue=config['capability']  # ✅ Route theo capability
         )
 
         # Chờ kết quả từ Celery worker bằng polling
@@ -522,12 +528,12 @@ with DAG(
             return {
                 'task_id': result.id,
                 'service': service_name,
-                'host': config['host'],
+                'capability': config['capability'],
                 'output': output,
                 'status': 'success'
             }
         except Exception as e:
-            raise Exception(f"Failed to stop {service_name} on {config['host']}: {str(e)}")
+            raise Exception(f"Failed to stop {service_name} (requires {config['capability']}): {str(e)}")
 
     # Stop tasks
     def stop_kafka(**context):
