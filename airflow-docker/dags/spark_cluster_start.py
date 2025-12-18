@@ -136,6 +136,7 @@ with DAG(
     task_start_master = PythonOperator(
         task_id='start_spark_master',
         python_callable=start_spark_master,
+        queue='spark_master',  # ✅ Chỉ định queue cho Airflow executor
         doc_md="""
         ## Start Spark Master
 
@@ -151,6 +152,7 @@ with DAG(
     task_start_worker = PythonOperator(
         task_id='start_spark_worker',
         python_callable=start_spark_worker,
+        queue='spark_worker',  # ✅ Chỉ định queue cho Airflow executor
         doc_md="""
         ## Start Spark Worker
 
