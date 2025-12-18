@@ -8,7 +8,7 @@ from mycelery.worker_config import get_worker_queues
 # Celery configuration
 # Broker: Redis for message queue
 broker_url = 'redis://192.168.80.229:6379/0'
-# Result Backend: PostgreSQL for task results
+# Result Backend: PostgreSQL for task results (shared with Airflow)
 result_backend = 'db+postgresql://airflow:airflow@192.168.80.229/airflow'
 
 # Serialization
