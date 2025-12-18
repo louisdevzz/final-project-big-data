@@ -68,7 +68,6 @@ x-airflow-common:
     # Disable remote logging to avoid worker log server errors
     AIRFLOW__LOGGING__REMOTE_LOGGING: 'false'
     AIRFLOW__LOGGING__REMOTE_LOG_CONN_ID: ''
-    AIRFLOW__LOGGING__WORKER_LOG_SERVER_PORT: ''
     # yamllint disable rule:line-length
     # Use simple http server on scheduler for health checks
     # See https://airflow.apache.org/docs/apache-airflow/stable/administration-and-deployment/logging-monitoring/check-health.html#scheduler-health-check-server
@@ -174,7 +173,7 @@ services:
 
   airflow-worker:
     <<: *airflow-common
-    command: celery worker
+    command: celery worker --queues default,spark_master,spark_worker,hadoop_namenode,hadoop_datanode,kafka,docker_host --without-log-server
     healthcheck:
       # yamllint disable rule:line-length
       test:
