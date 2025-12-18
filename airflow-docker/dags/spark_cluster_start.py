@@ -10,16 +10,30 @@ from mycelery.system_worker import docker_compose_up
 
 def wait_for_celery_result(result, timeout=60, poll_interval=2):
     """Wait for Celery task to complete"""
+    print(f"[DEBUG] Waiting for task {result.id}")
+    print(f"[DEBUG] Task state: {result.state}")
+
     elapsed = 0
     while elapsed < timeout:
-        if result.ready():
-            if result.successful():
-                return result.result
+        # Force refresh state from backend
+        state = result.state
+        print(f"[DEBUG] Current state after {elapsed}s: {state}")
+
+        if state in ['SUCCESS', 'FAILURE']:
+            if state == 'SUCCESS':
+                result_data = result.result
+                print(f"[DEBUG] Task succeeded! Result: {result_data}")
+                return result_data
             else:
-                raise Exception(f"Celery task failed: {result.result}")
+                error = result.result
+                print(f"[DEBUG] Task failed! Error: {error}")
+                raise Exception(f"Celery task failed: {error}")
+
         time.sleep(poll_interval)
         elapsed += poll_interval
 
+    print(f"[ERROR] Task {result.id} timed out after {timeout} seconds")
+    print(f"[ERROR] Final state: {result.state}")
     raise TimeoutError(f"Celery task {result.id} timed out after {timeout} seconds")
 
 
