@@ -365,23 +365,103 @@ docker-compose exec redis redis-cli ping
 
 Apache License 2.0
 
-Hướng dẫn setup trên mỗi node:
+## Worker Setup - UV Run Commands
 
-1. Trên máy 192.168.80.192 (Spark Master)
+### Automatic Queue Detection (Recommended)
 
-nohup uv run celery -A mycelery.system_worker.app worker --loglevel=INFO -E -Q node_55 > output.log 2>&1 &
+Deploy capability config và start worker tự động:
 
-2. Trên máy 192.168.80.53 (Spark Worker)
+```bash
+# 1. Deploy worker capabilities config
+bash scripts/deploy_worker_config.sh
 
-nohup uv run celery -A mycelery.system_worker.app worker --loglevel=INFO -E -Q node_53 > output.log 2>&1 &
+# 2. Start worker with auto queue detection
+bash scripts/start_worker.sh
+```
 
-3. Trên máy 192.168.80.57 (Hadoop Namenode + Kafka)
+### Manual Setup with UV Run
 
-nohup uv run celery -A mycelery.system_worker.app worker --loglevel=INFO -E -Q node_57 > output.log 2>&1 &
+Nếu không dùng script, có thể start worker thủ công với `uv run`:
 
-4. Trên máy 192.168.80.87 (Hadoop Datanode)
+**1. Trên máy 192.168.80.55 (Spark Master)**
+```bash
+# Foreground (để debug)
+uv run celery -A mycelery.system_worker worker \
+    --queues=spark_master,spark_common,docker_host,celery \
+    --loglevel=INFO \
+    --concurrency=4 \
+    --max-tasks-per-child=100 \
+    --time-limit=3600 \
+    --soft-time-limit=3300
 
-nohup uv run celery -A mycelery.system_worker.app worker --loglevel=INFO -E -Q node_87 > output.log 2>&1 &
+# Background (production)
+nohup uv run celery -A mycelery.system_worker worker \
+    --queues=spark_master,spark_common,docker_host,celery \
+    --loglevel=INFO \
+    --concurrency=4 \
+    --max-tasks-per-child=100 \
+    --time-limit=3600 \
+    --soft-time-limit=3300 > worker.log 2>&1 &
+```
+
+**2. Trên máy 192.168.80.53 (Spark Worker)**
+```bash
+nohup uv run celery -A mycelery.system_worker worker \
+    --queues=spark_worker,spark_common,docker_host,celery \
+    --loglevel=INFO \
+    --concurrency=4 \
+    --max-tasks-per-child=100 \
+    --time-limit=3600 \
+    --soft-time-limit=3300 > worker.log 2>&1 &
+```
+
+**3. Trên máy 192.168.80.57 (Hadoop Namenode + Kafka)**
+```bash
+nohup uv run celery -A mycelery.system_worker worker \
+    --queues=hadoop_namenode,hadoop_common,kafka,docker_host,celery \
+    --loglevel=INFO \
+    --concurrency=4 \
+    --max-tasks-per-child=100 \
+    --time-limit=3600 \
+    --soft-time-limit=3300 > worker.log 2>&1 &
+```
+
+**4. Trên máy 192.168.80.87 (Hadoop Datanode)**
+```bash
+nohup uv run celery -A mycelery.system_worker worker \
+    --queues=hadoop_datanode,hadoop_common,docker_host,celery \
+    --loglevel=INFO \
+    --concurrency=4 \
+    --max-tasks-per-child=100 \
+    --time-limit=3600 \
+    --soft-time-limit=3300 > worker.log 2>&1 &
+```
+
+### Verify Workers
+
+```bash
+# Check active workers
+uv run celery -A mycelery.system_worker inspect ping
+
+# Check queues each worker subscribes to
+uv run celery -A mycelery.system_worker inspect active_queues
+
+# Check worker stats
+uv run celery -A mycelery.system_worker inspect stats
+
+# Monitor tasks
+uv run celery -A mycelery.system_worker inspect active
+```
+
+### Stop Workers
+
+```bash
+# Graceful shutdown
+pkill -TERM -f "celery.*mycelery.system_worker"
+
+# Force kill (không khuyến khích)
+pkill -9 -f "celery.*mycelery.system_worker"
+```
 
 DAGs đã tạo:
 
