@@ -70,8 +70,8 @@ def get_worker_name():
     cap_str = '-'.join(sorted(capabilities))
     return f"worker@{hostname}[{cap_str}]"
 
-# Print config khi import
-if __name__ != '__main__':
+# Print config khi import (chỉ khi run trực tiếp, không khi import)
+if __name__ == '__main__':
     print("=" * 60)
     print("Worker Configuration Loaded")
     print("=" * 60)
