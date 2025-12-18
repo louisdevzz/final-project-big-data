@@ -173,7 +173,7 @@ services:
 
   airflow-worker:
     <<: *airflow-common
-    command: celery worker --queues default,spark_master,spark_worker,hadoop_namenode,hadoop_datanode,kafka,docker_host --without-log-server
+    command: celery worker --queues default,spark_master,spark_worker,hadoop_namenode,hadoop_datanode,kafka,docker_host
     healthcheck:
       # yamllint disable rule:line-length
       test:
@@ -188,6 +188,9 @@ services:
       # Required to handle warm shutdown of the celery workers properly
       # See https://airflow.apache.org/docs/docker-stack/entrypoint.html#signal-propagation
       DUMB_INIT_SETSID: "0"
+      # Disable worker log server to avoid hostname resolution issues
+      AIRFLOW__CELERY__WORKER_ENABLE_REMOTE_CONTROL: "false"
+      AIRFLOW__LOGGING__ENABLE_SERVE_LOGS: "false"
     restart: always
     depends_on:
       <<: *airflow-common-depends-on
