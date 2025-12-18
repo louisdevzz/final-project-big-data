@@ -5,9 +5,9 @@ Auto-detect queues từ worker capabilities
 from kombu import Queue
 from mycelery.worker_config import get_worker_queues
 
-# Redis broker configuration
+# Redis broker and backend configuration
 broker_url = 'redis://192.168.80.192:6379/0'
-result_backend = 'db+postgresql://airflow:airflow@192.168.80.192/airflow'
+result_backend = 'redis://192.168.80.192:6379/1'
 
 # Serialization
 task_serializer = 'json'
