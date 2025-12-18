@@ -172,6 +172,7 @@ services:
 
   airflow-worker:
     <<: *airflow-common
+    hostname: airflow-worker
     command: celery worker --queues default,spark_master,spark_worker,hadoop_namenode,hadoop_datanode,kafka,docker_host
     healthcheck:
       # yamllint disable rule:line-length
