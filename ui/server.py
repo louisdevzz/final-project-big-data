@@ -12,11 +12,10 @@ KAFKA_BOOTSTRAP_SERVERS = "192.168.80.57:9093"
 KAFKA_INPUT_TOPIC = "input_data"
 KAFKA_OUTPUT_TOPIC = "predictions"
 
-# Class names for Iris dataset
+# Class names for fraud detection
 CLASS_NAMES = {
-    0: "setosa",
-    1: "versicolor", 
-    2: "virginica"
+    0: "Normal",
+    1: "Fraud"
 }
 
 def consume_input_data():
@@ -33,12 +32,13 @@ def consume_input_data():
     
     for message in consumer:
         data = message.value
-        
+
         # Add class name for display
-        if 'target' in data:
-            data['target_name'] = CLASS_NAMES.get(data['target'], 'unknown')
-        
-        print(f"→ Input: features=[{data['feature1']:.2f}, {data['feature2']:.2f}, {data['feature3']:.2f}, {data['feature4']:.2f}] target={data.get('target', 'N/A')}")
+        if 'Class' in data:
+            data['class_name'] = CLASS_NAMES.get(data['Class'], 'unknown')
+
+        # Print summary of transaction
+        print(f"→ Input: Time={data.get('Time', 'N/A'):.0f}, Amount={data.get('Amount', 0):.2f}, Class={data.get('Class', 'N/A')} ({data.get('class_name', 'N/A')})")
         socketio.emit('input_data', data)
 
 def consume_predictions():
@@ -55,22 +55,31 @@ def consume_predictions():
     
     for message in consumer:
         data = message.value
-        
+
         # Add class names for display
         if 'actual_label' in data:
             data['actual_label_name'] = CLASS_NAMES.get(int(data['actual_label']), 'unknown')
-        
+
         if 'predicted_label' in data:
             data['predicted_label_name'] = CLASS_NAMES.get(int(data['predicted_label']), 'unknown')
-        
+
         # Calculate if prediction is correct
         if 'actual_label' in data and 'predicted_label' in data:
             data['is_correct'] = int(data['actual_label']) == int(data['predicted_label'])
             status = "✓" if data['is_correct'] else "✗"
             print(f"{status} Prediction: actual={int(data['actual_label'])} ({data['actual_label_name']}), predicted={int(data['predicted_label'])} ({data['predicted_label_name']})")
+        elif 'Class' in data and 'prediction' in data:
+            # Alternative format
+            data['actual_label'] = data['Class']
+            data['predicted_label'] = data['prediction']
+            data['actual_label_name'] = CLASS_NAMES.get(int(data['Class']), 'unknown')
+            data['predicted_label_name'] = CLASS_NAMES.get(int(data['prediction']), 'unknown')
+            data['is_correct'] = int(data['Class']) == int(data['prediction'])
+            status = "✓" if data['is_correct'] else "✗"
+            print(f"{status} Prediction: actual={int(data['Class'])} ({data['actual_label_name']}), predicted={int(data['prediction'])} ({data['predicted_label_name']})")
         else:
             print(f"← Prediction: {data}")
-        
+
         socketio.emit('prediction_data', data)
 
 @app.route('/')
@@ -108,13 +117,12 @@ def index():
             <li>Kafka Server: <code>192.168.80.57:9093</code></li>
             <li>Input Topic: <code>input_data</code></li>
             <li>Output Topic: <code>predictions</code></li>
-            <li>WebSocket: <code>ws://0.0.0.0:5000</code></li>
+            <li>WebSocket: <code>ws://0.0.0.0:8000</code></li>
         </ul>
-        <h3>Iris Classes:</h3>
+        <h3>Fraud Detection Classes:</h3>
         <ul>
-            <li>0 = setosa</li>
-            <li>1 = versicolor</li>
-            <li>2 = virginica</li>
+            <li>0 = Normal Transaction</li>
+            <li>1 = Fraudulent Transaction</li>
         </ul>
     </body>
     </html>
@@ -138,13 +146,13 @@ if __name__ == '__main__':
     prediction_thread.start()
     
     print("\n" + "="*60)
-    print("🚀 Kafka Monitor Backend Server - Iris Classification")
+    print("🚀 Kafka Monitor Backend Server - Fraud Detection")
     print("="*60)
-    print(f"→ Server: http://0.0.0.0:5000")
+    print(f"→ Server: http://0.0.0.0:8000")
     print(f"→ Kafka: {KAFKA_BOOTSTRAP_SERVERS}")
     print(f"→ Input Topic: {KAFKA_INPUT_TOPIC}")
     print(f"→ Output Topic: {KAFKA_OUTPUT_TOPIC}")
-    print(f"→ Classes: 0=setosa, 1=versicolor, 2=virginica")
+    print(f"→ Classes: 0=Normal, 1=Fraud")
     print("="*60 + "\n")
     
-    socketio.run(app, host='0.0.0.0', port=5000, debug=False)
+    socketio.run(app, host='0.0.0.0', port=8000, debug=False)

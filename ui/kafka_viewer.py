@@ -60,14 +60,36 @@ def view_input_data():
         for message in consumer:
             data = message.value
             timestamp = datetime.fromtimestamp(message.timestamp / 1000).strftime('%Y-%m-%d %H:%M:%S')
-            
-            print(f"{timestamp:<20} "
-                  f"{data['feature1']:<10.2f} "
-                  f"{data['feature2']:<10.2f} "
-                  f"{data['feature3']:<10.2f} "
-                  f"{data['feature4']:<10.2f} "
-                  f"{data['target']:<8}")
-            
+
+            # Debug: print the actual data structure on first message
+            if 'debug_printed' not in locals():
+                print(f"\nData structure: {data}\n")
+                print(f"Available keys: {list(data.keys())}\n")
+                print("-"*80)
+                debug_printed = True
+
+            # Handle different data structures
+            if 'features' in data:
+                # If features are in an array
+                features = data['features']
+                if isinstance(features, list):
+                    feature_str = " ".join([f"{f:<10.2f}" for f in features[:4]])
+                    target = data.get('target', data.get('label', 'N/A'))
+                    print(f"{timestamp:<20} {feature_str} {target:<8}")
+                else:
+                    print(f"{timestamp:<20} {data}")
+            elif 'feature1' in data:
+                # Original format
+                print(f"{timestamp:<20} "
+                      f"{data['feature1']:<10.2f} "
+                      f"{data['feature2']:<10.2f} "
+                      f"{data['feature3']:<10.2f} "
+                      f"{data['feature4']:<10.2f} "
+                      f"{data['target']:<8}")
+            else:
+                # Unknown format - print raw
+                print(f"{timestamp:<20} {data}")
+
     except KeyboardInterrupt:
         print("\n\n✓ Stopped viewing input_data")
     finally:
@@ -105,26 +127,52 @@ def view_predictions():
         for message in consumer:
             data = message.value
             timestamp = datetime.fromtimestamp(message.timestamp / 1000).strftime('%Y-%m-%d %H:%M:%S')
-            
-            actual = int(data['actual_label'])
-            predicted = int(data['predicted_label'])
-            match = "✓" if actual == predicted else "✗"
-            
-            total += 1
-            if actual == predicted:
-                correct += 1
-            
-            accuracy = (correct / total) * 100
-            
-            print(f"{timestamp:<20} "
-                  f"{data['feature1']:<10.2f} "
-                  f"{data['feature2']:<10.2f} "
-                  f"{data['feature3']:<10.2f} "
-                  f"{data['feature4']:<10.2f} "
-                  f"{actual:<8} "
-                  f"{predicted:<10.0f} "
-                  f"{match:<6}  [Accuracy: {accuracy:.1f}% ({correct}/{total})]")
-            
+
+            # Debug: print the actual data structure on first message
+            if 'debug_printed' not in locals():
+                print(f"\nData structure: {data}\n")
+                print(f"Available keys: {list(data.keys())}\n")
+                print("-"*100)
+                debug_printed = True
+
+            # Handle different data structures
+            try:
+                actual = int(data.get('actual_label', data.get('actual', data.get('target', -1))))
+                predicted = int(data.get('predicted_label', data.get('prediction', data.get('predicted', -1))))
+                match = "✓" if actual == predicted else "✗"
+
+                total += 1
+                if actual == predicted:
+                    correct += 1
+
+                accuracy = (correct / total) * 100
+
+                # Handle features
+                if 'features' in data:
+                    features = data['features']
+                    if isinstance(features, list):
+                        feature_str = " ".join([f"{f:<10.2f}" for f in features[:4]])
+                        print(f"{timestamp:<20} {feature_str} {actual:<8} {predicted:<10.0f} "
+                              f"{match:<6}  [Accuracy: {accuracy:.1f}% ({correct}/{total})]")
+                    else:
+                        print(f"{timestamp:<20} {data} {match:<6}  [Accuracy: {accuracy:.1f}% ({correct}/{total})]")
+                elif 'feature1' in data:
+                    # Original format
+                    print(f"{timestamp:<20} "
+                          f"{data['feature1']:<10.2f} "
+                          f"{data['feature2']:<10.2f} "
+                          f"{data['feature3']:<10.2f} "
+                          f"{data['feature4']:<10.2f} "
+                          f"{actual:<8} "
+                          f"{predicted:<10.0f} "
+                          f"{match:<6}  [Accuracy: {accuracy:.1f}% ({correct}/{total})]")
+                else:
+                    # Simplified format without features
+                    print(f"{timestamp:<20} Actual: {actual:<8} Predicted: {predicted:<10.0f} "
+                          f"{match:<6}  [Accuracy: {accuracy:.1f}% ({correct}/{total})]")
+            except (KeyError, ValueError, TypeError) as e:
+                print(f"{timestamp:<20} ERROR parsing data: {e} - Data: {data}")
+
     except KeyboardInterrupt:
         print("\n")
         print("="*100)
