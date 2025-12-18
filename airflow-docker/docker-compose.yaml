@@ -65,11 +65,13 @@ x-airflow-common:
     AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
     AIRFLOW__CORE__EXECUTION_API_SERVER_URL: 'http://airflow-apiserver:8080/execution/'
     PYTHONPATH: '/opt/airflow:/opt/airflow/dags:/opt/airflow/mycelery'
-    # Disable remote logging and worker log server to avoid hostname errors
+    # Disable remote logging to use local file-based logging
     AIRFLOW__LOGGING__REMOTE_LOGGING: 'false'
     AIRFLOW__LOGGING__REMOTE_LOG_CONN_ID: ''
-    AIRFLOW__LOGGING__ENABLE_TASK_CONTEXT_LOGGER: 'false'
-    AIRFLOW__LOGGING__ENABLE_SERVE_LOGS: 'false'
+    # Increase log fetch timeout to handle slow log retrieval
+    AIRFLOW__LOGGING__LOG_FETCH_TIMEOUT_SEC: '10'
+    # Fallback to local logs if worker log server unavailable
+    AIRFLOW__LOGGING__LOG_FETCH_DELAY_SEC: '1'
     # yamllint disable rule:line-length
     # Use simple http server on scheduler for health checks
     # See https://airflow.apache.org/docs/apache-airflow/stable/administration-and-deployment/logging-monitoring/check-health.html#scheduler-health-check-server
@@ -175,6 +177,7 @@ services:
 
   airflow-worker:
     <<: *airflow-common
+    hostname: airflow-worker
     command: celery worker --queues default
     healthcheck:
       # yamllint disable rule:line-length
