@@ -6,8 +6,8 @@ from kombu import Queue
 from mycelery.worker_config import get_worker_queues
 
 # Redis broker and backend configuration
-broker_url = 'redis://192.168.80.192:6379/0'
-result_backend = 'redis://192.168.80.192:6379/1'
+broker_url = 'redis://192.168.80.229:6379/0'
+result_backend = 'redis://192.168.80.229:6379/1'
 
 # Serialization
 task_serializer = 'json'

@@ -66,7 +66,7 @@ fi
 cd "$WORKER_DIR"
 
 # Check Redis connection
-REDIS_HOST="${CELERY_BROKER_URL:-redis://192.168.80.192:6379/0}"
+REDIS_HOST="${CELERY_BROKER_URL:-redis://192.168.80.229:6379/0}"
 echo -e "${GREEN}Checking Redis connection...${NC}"
 echo "Redis: $REDIS_HOST"
 echo ""

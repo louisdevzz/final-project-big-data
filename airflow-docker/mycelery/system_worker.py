@@ -3,8 +3,8 @@ import subprocess
 import os
 
 # Redis broker and backend - có thể dùng env var để flexible hơn
-REDIS_BROKER = os.getenv('CELERY_BROKER_URL', 'redis://192.168.80.192:6379/0')
-CELERY_BACKEND = os.getenv('CELERY_RESULT_BACKEND', 'redis://192.168.80.192:6379/1')
+REDIS_BROKER = os.getenv('CELERY_BROKER_URL', 'redis://192.168.80.229:6379/0')
+CELERY_BACKEND = os.getenv('CELERY_RESULT_BACKEND', 'redis://192.168.80.229:6379/1')
 
 app = Celery(
     'system_worker',
