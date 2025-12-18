@@ -106,14 +106,17 @@ echo "  Soft time limit: ${WORKER_SOFT_TIME_LIMIT}s"
 echo "  Log level: $WORKER_LOG_LEVEL"
 echo ""
 
-# Start worker with auto queue detection
-# Worker sẽ tự động đọc capabilities từ config file
+# Get queues from worker config
+WORKER_QUEUES=$(python3 -c "from mycelery.worker_config import get_worker_queues; print(','.join(get_worker_queues()))")
+
+echo "Subscribing to queues: $WORKER_QUEUES"
+echo ""
+
+# Start worker with auto-detected queues
 exec celery -A mycelery.system_worker worker \
+    --queues="$WORKER_QUEUES" \
     --loglevel="$WORKER_LOG_LEVEL" \
     --concurrency="$WORKER_CONCURRENCY" \
     --max-tasks-per-child="$WORKER_MAX_TASKS" \
     --time-limit="$WORKER_TIME_LIMIT" \
     --soft-time-limit="$WORKER_SOFT_TIME_LIMIT"
-
-# Note: Không cần specify --queues
-# Worker tự động subscribe dựa trên capabilities trong config file
