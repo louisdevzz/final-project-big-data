@@ -2,138 +2,76 @@ from airflow import DAG
 from airflow.providers.standard.operators.python import PythonOperator
 from airflow.sdk import Param
 from datetime import datetime
-import time
 
-# Import Celery app để gọi tasks bằng tên
-from mycelery.system_worker import app as celery_app
-
-
-def wait_for_celery_result(result, timeout=60, poll_interval=2):
-    """Wait for Celery task to complete"""
-    print(f"[DEBUG] Waiting for task {result.id}")
-    print(f"[DEBUG] Task state: {result.state}")
-
-    elapsed = 0
-    while elapsed < timeout:
-        # Force refresh state from backend
-        state = result.state
-        print(f"[DEBUG] Current state after {elapsed}s: {state}")
-
-        if state in ['SUCCESS', 'FAILURE']:
-            if state == 'SUCCESS':
-                result_data = result.result
-                print(f"[DEBUG] Task succeeded! Result: {result_data}")
-                return result_data
-            else:
-                # Get error information
-                error = result.result
-                traceback = getattr(result, 'traceback', None)
-                print(f"[DEBUG] Task failed! Error: {error}")
-                if traceback:
-                    print(f"[DEBUG] Traceback: {traceback}")
-                
-                # If error is just the task name, it means task wasn't found
-                if isinstance(error, str) and error == 'mycelery.system_worker.docker_compose_up':
-                    raise Exception(
-                        f"Celery task not found or not registered on worker. "
-                        f"Task name: {error}. "
-                        f"Make sure a worker is running and has the task registered. "
-                        f"Check worker logs and ensure the task is imported correctly."
-                    )
-                else:
-                    raise Exception(f"Celery task failed: {error}")
-
-        time.sleep(poll_interval)
-        elapsed += poll_interval
-
-    print(f"[ERROR] Task {result.id} timed out after {timeout} seconds")
-    print(f"[ERROR] Final state: {result.state}")
-    raise TimeoutError(f"Celery task {result.id} timed out after {timeout} seconds")
+# Import Celery tasks từ mycelery.system_worker
+from mycelery.system_worker import (
+    docker_compose_up,
+)
 
 
 def start_spark_master(**context):
-    """Start Spark Master service"""
+    """Start Spark Master service using docker-compose"""
     params = context['params']
     compose_path = params.get('spark_compose_path', '~/bd/spark/docker-compose.yml')
 
-    print(f"[DEBUG] Starting Spark Master")
-    print(f"[DEBUG] Compose path: {compose_path}")
-    print(f"[DEBUG] Sending task to queue: spark_master")
+    print(f"[INFO] Starting Spark Master")
+    print(f"[INFO] Compose path: {compose_path}")
 
-    # Use send_task with task name string for better reliability
-    result = celery_app.send_task(
-        'mycelery.system_worker.docker_compose_up',
+    # Call Celery task to run docker-compose up on remote worker
+    result = docker_compose_up.apply_async(
         args=[compose_path],
         kwargs={
-            'services': 'spark-master',
+            'services': 'spark-master',  # Service name in docker-compose.yml
             'detach': True,
             'build': False,
             'force_recreate': False,
         },
-        queue='spark_master'  # Route to spark_master capability
+        queue='spark_master'  # Route to worker with spark_master capability
     )
 
-    print(f"[DEBUG] Task sent! Task ID: {result.id}")
-    print(f"[DEBUG] Waiting for result...")
+    print(f"[INFO] Task sent to queue: spark_master")
+    print(f"[INFO] Celery task ID: {result.id}")
 
-    try:
-        output = wait_for_celery_result(result, timeout=300)
-        print(f"[DEBUG] Task completed successfully!")
-        print(f"[DEBUG] Output: {output}")
-        return {
-            'task_id': result.id,
-            'service': 'spark-master',
-            'capability': 'spark_master',
-            'output': output,
-            'status': 'success'
-        }
-    except Exception as e:
-        print(f"[ERROR] Task failed: {str(e)}")
-        raise Exception(f"Failed to start Spark Master: {str(e)}")
+    return {
+        'task_id': result.id,
+        'service': 'spark-master',
+        'queue': 'spark_master',
+        'compose_path': compose_path
+    }
 
 
 def start_spark_worker(**context):
-    """Start Spark Worker service"""
+    """Start Spark Worker service using docker-compose"""
     params = context['params']
     compose_path = params.get('spark_compose_path', '~/bd/spark/docker-compose.yml')
 
-    print(f"[DEBUG] Starting Spark Worker")
-    print(f"[DEBUG] Compose path: {compose_path}")
-    print(f"[DEBUG] Sending task to queue: spark_worker")
+    print(f"[INFO] Starting Spark Worker")
+    print(f"[INFO] Compose path: {compose_path}")
 
-    # Use send_task with task name string for better reliability
-    result = celery_app.send_task(
-        'mycelery.system_worker.docker_compose_up',
+    # Call Celery task to run docker-compose up on remote worker
+    result = docker_compose_up.apply_async(
         args=[compose_path],
         kwargs={
-            'services': 'spark-worker',
+            'services': 'spark-worker',  # Service name in docker-compose.yml
             'detach': True,
             'build': False,
             'force_recreate': False,
         },
-        queue='spark_worker'  # Route to spark_worker capability
+        queue='spark_worker'  # Route to worker with spark_worker capability
     )
 
-    print(f"[DEBUG] Task sent! Task ID: {result.id}")
-    print(f"[DEBUG] Waiting for result...")
+    print(f"[INFO] Task sent to queue: spark_worker")
+    print(f"[INFO] Celery task ID: {result.id}")
 
-    try:
-        output = wait_for_celery_result(result, timeout=300)
-        print(f"[DEBUG] Task completed successfully!")
-        print(f"[DEBUG] Output: {output}")
-        return {
-            'task_id': result.id,
-            'service': 'spark-worker',
-            'capability': 'spark_worker',
-            'output': output,
-            'status': 'success'
-        }
-    except Exception as e:
-        print(f"[ERROR] Task failed: {str(e)}")
-        raise Exception(f"Failed to start Spark Worker: {str(e)}")
+    return {
+        'task_id': result.id,
+        'service': 'spark-worker',
+        'queue': 'spark_worker',
+        'compose_path': compose_path
+    }
 
 
-# DAG Definition
+# DAG Definition: Start Spark Cluster
 with DAG(
     dag_id='spark_cluster_start',
     description='Start Spark Master and Worker services',
@@ -148,21 +86,20 @@ with DAG(
             description='Path to Spark docker-compose.yml file'
         ),
     }
-) as dag:
+) as dag_start:
 
     # Task 1: Start Spark Master
     task_start_master = PythonOperator(
         task_id='start_spark_master',
         python_callable=start_spark_master,
-        queue='spark_master',  # ✅ Chỉ định queue cho Airflow executor
         doc_md="""
         ## Start Spark Master
 
-        This task starts the Spark Master service on the machine with `spark_master` capability.
+        This task starts the Spark Master service on the remote machine with `spark_master` capability.
 
         - **Queue**: spark_master
         - **Service**: spark-master
-        - **Timeout**: 300 seconds
+        - **Method**: docker-compose up
         """
     )
 
@@ -170,15 +107,14 @@ with DAG(
     task_start_worker = PythonOperator(
         task_id='start_spark_worker',
         python_callable=start_spark_worker,
-        queue='spark_worker',  # ✅ Chỉ định queue cho Airflow executor
         doc_md="""
         ## Start Spark Worker
 
-        This task starts the Spark Worker service on the machine with `spark_worker` capability.
+        This task starts the Spark Worker service on the remote machine with `spark_worker` capability.
 
         - **Queue**: spark_worker
         - **Service**: spark-worker
-        - **Timeout**: 300 seconds
+        - **Method**: docker-compose up
         """
     )
 
