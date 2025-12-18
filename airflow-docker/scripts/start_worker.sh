@@ -7,6 +7,19 @@
 
 set -e
 
+# Activate uv environment if uv is available
+if command -v uv &> /dev/null; then
+    echo -e "${GREEN}Activating uv environment...${NC}"
+    # Check if .venv exists
+    if [ -d ".venv" ]; then
+        source .venv/bin/activate
+    else
+        echo -e "${YELLOW}Warning: .venv not found, trying to sync with uv...${NC}"
+        uv sync
+        source .venv/bin/activate
+    fi
+fi
+
 # Colors for output
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
