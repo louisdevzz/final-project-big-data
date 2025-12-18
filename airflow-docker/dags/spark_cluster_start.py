@@ -28,6 +28,10 @@ def start_spark_master(**context):
     params = context['params']
     compose_path = params.get('spark_compose_path', '~/bd/spark/docker-compose.yml')
 
+    print(f"[DEBUG] Starting Spark Master")
+    print(f"[DEBUG] Compose path: {compose_path}")
+    print(f"[DEBUG] Sending task to queue: spark_master")
+
     result = docker_compose_up.apply_async(
         args=[compose_path],
         kwargs={
@@ -39,8 +43,13 @@ def start_spark_master(**context):
         queue='spark_master'  # Route to spark_master capability
     )
 
+    print(f"[DEBUG] Task sent! Task ID: {result.id}")
+    print(f"[DEBUG] Waiting for result...")
+
     try:
         output = wait_for_celery_result(result, timeout=300)
+        print(f"[DEBUG] Task completed successfully!")
+        print(f"[DEBUG] Output: {output}")
         return {
             'task_id': result.id,
             'service': 'spark-master',
@@ -49,6 +58,7 @@ def start_spark_master(**context):
             'status': 'success'
         }
     except Exception as e:
+        print(f"[ERROR] Task failed: {str(e)}")
         raise Exception(f"Failed to start Spark Master: {str(e)}")
 
 
@@ -56,6 +66,10 @@ def start_spark_worker(**context):
     """Start Spark Worker service"""
     params = context['params']
     compose_path = params.get('spark_compose_path', '~/bd/spark/docker-compose.yml')
+
+    print(f"[DEBUG] Starting Spark Worker")
+    print(f"[DEBUG] Compose path: {compose_path}")
+    print(f"[DEBUG] Sending task to queue: spark_worker")
 
     result = docker_compose_up.apply_async(
         args=[compose_path],
@@ -68,8 +82,13 @@ def start_spark_worker(**context):
         queue='spark_worker'  # Route to spark_worker capability
     )
 
+    print(f"[DEBUG] Task sent! Task ID: {result.id}")
+    print(f"[DEBUG] Waiting for result...")
+
     try:
         output = wait_for_celery_result(result, timeout=300)
+        print(f"[DEBUG] Task completed successfully!")
+        print(f"[DEBUG] Output: {output}")
         return {
             'task_id': result.id,
             'service': 'spark-worker',
@@ -78,6 +97,7 @@ def start_spark_worker(**context):
             'status': 'success'
         }
     except Exception as e:
+        print(f"[ERROR] Task failed: {str(e)}")
         raise Exception(f"Failed to start Spark Worker: {str(e)}")
 
 
