@@ -2,7 +2,6 @@
 Celery Configuration cho Capability-based Workers
 Auto-detect queues từ worker capabilities
 """
-from kombu import Queue
 from mycelery.worker_config import get_worker_queues
 
 # Celery configuration
@@ -22,8 +21,10 @@ enable_utc = True
 
 # Task routing - không hardcode nữa
 # Chỉ định nghĩa pattern routing
+# Note: Explicit queue parameter in send_task() will override these routes
 task_routes = {
-    'mycelery.system_worker.docker_*': {'queue': 'docker_host'},
+    # Docker operations default to docker_host, but can be overridden
+    # 'mycelery.system_worker.docker_*': {'queue': 'docker_host'},  # Commented out to allow explicit queue override
     'mycelery.system_worker.run_command': {'queue': 'default'},  # Will be overridden by explicit queue param
 }
 

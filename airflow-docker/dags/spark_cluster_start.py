@@ -4,8 +4,8 @@ from airflow.sdk import Param
 from datetime import datetime
 import time
 
-# Import tasks từ system_worker
-from mycelery.system_worker import docker_compose_up
+# Import Celery app để gọi tasks bằng tên
+from mycelery.system_worker import app as celery_app
 
 
 def wait_for_celery_result(result, timeout=60, poll_interval=2):
@@ -25,9 +25,23 @@ def wait_for_celery_result(result, timeout=60, poll_interval=2):
                 print(f"[DEBUG] Task succeeded! Result: {result_data}")
                 return result_data
             else:
+                # Get error information
                 error = result.result
+                traceback = getattr(result, 'traceback', None)
                 print(f"[DEBUG] Task failed! Error: {error}")
-                raise Exception(f"Celery task failed: {error}")
+                if traceback:
+                    print(f"[DEBUG] Traceback: {traceback}")
+                
+                # If error is just the task name, it means task wasn't found
+                if isinstance(error, str) and error == 'mycelery.system_worker.docker_compose_up':
+                    raise Exception(
+                        f"Celery task not found or not registered on worker. "
+                        f"Task name: {error}. "
+                        f"Make sure a worker is running and has the task registered. "
+                        f"Check worker logs and ensure the task is imported correctly."
+                    )
+                else:
+                    raise Exception(f"Celery task failed: {error}")
 
         time.sleep(poll_interval)
         elapsed += poll_interval
@@ -46,7 +60,9 @@ def start_spark_master(**context):
     print(f"[DEBUG] Compose path: {compose_path}")
     print(f"[DEBUG] Sending task to queue: spark_master")
 
-    result = docker_compose_up.apply_async(
+    # Use send_task with task name string for better reliability
+    result = celery_app.send_task(
+        'mycelery.system_worker.docker_compose_up',
         args=[compose_path],
         kwargs={
             'services': 'spark-master',
@@ -85,7 +101,9 @@ def start_spark_worker(**context):
     print(f"[DEBUG] Compose path: {compose_path}")
     print(f"[DEBUG] Sending task to queue: spark_worker")
 
-    result = docker_compose_up.apply_async(
+    # Use send_task with task name string for better reliability
+    result = celery_app.send_task(
+        'mycelery.system_worker.docker_compose_up',
         args=[compose_path],
         kwargs={
             'services': 'spark-worker',

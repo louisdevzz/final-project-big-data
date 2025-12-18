@@ -23,9 +23,10 @@ app.conf.update(
     enable_utc=True,
 
     # QUAN TRỌNG: Task routing theo CAPABILITY, không theo NODE
+    # Note: Explicit queue parameter in send_task() will override these routes
     task_routes={
-        # Docker operations -> bất kỳ worker nào có docker_host capability
-        'mycelery.system_worker.docker_*': {'queue': 'docker_host'},
+        # Docker operations default to docker_host, but can be overridden by explicit queue param
+        # 'mycelery.system_worker.docker_*': {'queue': 'docker_host'},  # Commented out to allow explicit queue override
     }
 )
 
@@ -181,7 +182,7 @@ def docker_ps(self, all_containers=False):
         }
 
 
-@app.task(bind=True)
+@app.task(bind=True, name='mycelery.system_worker.docker_compose_up')
 def docker_compose_up(self, path, services=None, detach=True, build=False, force_recreate=False):
     """Chạy docker-compose up với path được chỉ định
 
