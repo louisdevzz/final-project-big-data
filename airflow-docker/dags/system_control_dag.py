@@ -4,251 +4,138 @@ from airflow.sdk import Param
 from datetime import datetime
 import time
 
-# Import tasks từ system_worker
+# Import tasks directly from mycelery.system_worker
 from mycelery.system_worker import (
-    run_command,
-    docker_run,
-    docker_stop,
-    docker_remove,
-    docker_ps,
     docker_compose_up,
     docker_compose_down,
-    docker_compose_ps,
-    docker_compose_logs
+    run_command
 )
 
+# ============== CONFIGURATION ==============
 
-def wait_for_celery_result(result, timeout=60, poll_interval=2):
+BIGDATA_SERVICES = {
+    'spark-master': {
+        'capability': 'spark_master',
+        'path': '~/bd/spark/docker-compose.yml',
+        'service': 'spark-master',
+        'description': 'Spark Master service',
+    },
+    'spark-worker': {
+        'capability': 'spark_worker',
+        'path': '~/bd/spark/docker-compose.yml',
+        'service': 'spark-worker',
+        'description': 'Spark Worker service',
+    },
+    'hadoop-namenode': {
+        'capability': 'hadoop_namenode',
+        'path': '~/bd/hadoop/docker-compose.namenode.yml',
+        'service': None,
+        'description': 'Hadoop Namenode',
+    },
+    'hadoop-datanode': {
+        'capability': 'hadoop_datanode',
+        'path': '~/bd/hadoop/docker-compose.datanode.yml',
+        'service': None,
+        'description': 'Hadoop Datanode',
+    },
+    'kafka': {
+        'capability': 'kafka',
+        'path': '~/bd/kafka/docker-compose.yml',
+        'service': None,
+        'description': 'Kafka broker',
+    },
+}
+
+# ============== HELPER FUNCTIONS ==============
+
+def wait_for_celery_result(result, timeout=600, poll_interval=5):
+    """Blocking wait for Celery result. Used for data jobs that must complete."""
     elapsed = 0
     while elapsed < timeout:
         if result.ready():
             if result.successful():
                 return result.result
             else:
-                # Task failed
                 raise Exception(f"Celery task failed: {result.result}")
         time.sleep(poll_interval)
         elapsed += poll_interval
 
     raise TimeoutError(f"Celery task {result.id} timed out after {timeout} seconds")
 
-
-# ============== TASK FUNCTIONS ==============
-
-def task_docker_run(**context):
-    """Task chạy Docker container"""
-    params = context['params']
-    image = params.get('image', 'hello-world')
-    container_name = params.get('container_name', None)
-    ports = params.get('ports', None)
-
-    # Parse ports nếu là string
-    if ports and isinstance(ports, str) and ports.strip():
-        ports = [p.strip() for p in ports.split(',')]
-    else:
-        ports = None
-
-    result = docker_run.delay(image, container_name, ports)
-    return {'task_id': result.id, 'image': image}
-
-
-def task_docker_stop(**context):
-    """Task dừng Docker container"""
-    params = context['params']
-    container_name = params.get('container_name', '')
-
-    result = docker_stop.delay(container_name)
-    return {'task_id': result.id, 'container_name': container_name}
-
-
-def task_docker_remove(**context):
-    """Task xóa Docker container"""
-    params = context['params']
-    container_name = params.get('container_name', '')
-
-    result = docker_remove.delay(container_name)
-    return {'task_id': result.id, 'container_name': container_name}
-
-
-def task_docker_ps(**context):
-    """Task liệt kê Docker containers"""
-    params = context['params']
-    all_containers = params.get('all_containers', False)
-
-    result = docker_ps.delay(all_containers)
-    return {'task_id': result.id}
-
-
-def task_docker_compose_up(**context):
-    """Task chạy docker-compose up"""
-    params = context['params']
-    path = params.get('compose_path', '/path/to/docker-compose.yml')
-    services = params.get('services', None)
-    detach = params.get('detach', True)
-    build = params.get('build', False)
-    force_recreate = params.get('force_recreate', False)
-
-    # Parse services nếu là string
-    if services and isinstance(services, str) and services.strip():
-        services = [s.strip() for s in services.split(',')]
-    else:
-        services = None
-
-    result = docker_compose_up.delay(path, services, detach, build, force_recreate)
-    return {'task_id': result.id, 'compose_path': path, 'services': services}
-
-
-def task_docker_compose_down(**context):
-    """Task chạy docker-compose down"""
-    params = context['params']
-    path = params.get('compose_path', '/path/to/docker-compose.yml')
-    services = params.get('services', None)
-    volumes = params.get('remove_volumes', False)
-    remove_orphans = params.get('remove_orphans', False)
-
-    # Parse services nếu là string
-    if services and isinstance(services, str) and services.strip():
-        services = [s.strip() for s in services.split(',')]
-    else:
-        services = None
-
-    result = docker_compose_down.delay(path, services, volumes, remove_orphans)
-    return {'task_id': result.id, 'compose_path': path, 'services': services}
-
-
-def task_docker_compose_ps(**context):
-    """Task liệt kê containers của docker-compose"""
-    params = context['params']
-    path = params.get('compose_path', '/path/to/docker-compose.yml')
-
-    result = docker_compose_ps.delay(path)
-    return {'task_id': result.id, 'compose_path': path}
-
-
-def task_docker_compose_logs(**context):
-    """Task lấy logs từ docker-compose"""
-    params = context['params']
-    path = params.get('compose_path', '/path/to/docker-compose.yml')
-    service = params.get('service', None)
-    tail = params.get('tail', 100)
-
-    if service and isinstance(service, str) and not service.strip():
-        service = None
-
-    result = docker_compose_logs.delay(path, service, tail)
-    return {'task_id': result.id, 'compose_path': path}
-
-
 # ============== DAG 4: Docker Compose Stop ==============
 
 with DAG(
     dag_id='docker_compose_stop',
-    description='DAG dừng Docker Compose services',
+    description='DAG to stop arbitrary Docker Compose services',
     start_date=datetime(2024, 1, 1),
     schedule=None,
     catchup=False,
     tags=['docker', 'compose', 'stop'],
     params={
-        'compose_path': Param('~/bd/spark/docker-compose.yml', type='string', description='Đường dẫn file docker-compose.yml'),
-        'services': Param('', type='string', description='Services cần dừng (vd: spark-master,spark-worker). Để trống = tất cả'),
-        'remove_volumes': Param(False, type='boolean', description='Xóa volumes'),
-        'remove_orphans': Param(False, type='boolean', description='Xóa orphan containers'),
+        'compose_path': Param('~/bd/spark/docker-compose.yml', type='string', description='Path to docker-compose.yml'),
+        'services': Param('', type='string', description='Services to stop (comma separated). Empty for all.'),
+        'remove_volumes': Param(False, type='boolean', description='Remove volumes'),
+        'remove_orphans': Param(False, type='boolean', description='Remove orphans'),
     }
 ) as dag_compose_stop:
 
     def task_compose_stop(**context):
-        """Dừng docker-compose services"""
+        """Stop docker-compose services (Non-blocking submission)"""
         params = context['params']
         path = params.get('compose_path')
-        services = params.get('services', None)
+        services_str = params.get('services', '')
         volumes = params.get('remove_volumes', False)
         remove_orphans = params.get('remove_orphans', False)
 
-        # Parse services nếu là string
-        if services and isinstance(services, str) and services.strip():
-            services = [s.strip() for s in services.split(',')]
-        else:
-            services = None
+        services = [s.strip() for s in services_str.split(',')] if services_str.strip() else None
 
-        result = docker_compose_down.delay(path, services, volumes, remove_orphans)
-        return {'task_id': result.id, 'compose_path': path, 'services': services}
+        # Fire and forget / Async submission
+        result = docker_compose_down.apply_async(
+            args=[path],
+            kwargs={
+                'services': services,
+                'volumes': volumes,
+                'remove_orphans': remove_orphans
+            }
+            # No specific queue enforced here, relies on default or routing
+        )
+        
+        return {'task_id': result.id, 'compose_path': path, 'status': 'submitted'}
 
     stop_compose_task = PythonOperator(
         task_id='stop_docker_compose',
         python_callable=task_compose_stop,
     )
 
-
-# ============== DAG 5: Big Data Pipeline ==============
-# Pipeline chạy trên nhiều node khác nhau
-
-# ============== CAPABILITY-BASED SERVICE CONFIGURATION ==============
-# Không còn hardcode host/IP nữa
-# Chỉ định nghĩa NĂNG LỰC cần thiết và cấu hình service
-
-BIGDATA_SERVICES = {
-    'spark-master': {
-        'capability': 'spark_master',  # Queue name dựa trên capability
-        'path': '~/bd/spark/docker-compose.yml',
-        'service': 'spark-master',
-        'description': 'Spark Master service - requires spark_master capability',
-    },
-    'spark-worker': {
-        'capability': 'spark_worker',
-        'path': '~/bd/spark/docker-compose.yml',
-        'service': 'spark-worker',
-        'description': 'Spark Worker service - requires spark_worker capability',
-    },
-    'hadoop-namenode': {
-        'capability': 'hadoop_namenode',
-        'path': '~/bd/hadoop/docker-compose.namenode.yml',
-        'service': None,  # Chạy tất cả services trong file
-        'description': 'Hadoop Namenode - requires hadoop_namenode capability',
-    },
-    'hadoop-datanode': {
-        'capability': 'hadoop_datanode',
-        'path': '~/bd/hadoop/docker-compose.datanode.yml',
-        'service': None,
-        'description': 'Hadoop Datanode - requires hadoop_datanode capability',
-    },
-    'kafka': {
-        'capability': 'kafka',
-        'path': '~/bd/kafka/docker-compose.yml',
-        'service': None,
-        'description': 'Kafka broker - requires kafka capability',
-    },
-}
-
-# Mapping giữa service role và capability cần thiết cho command execution
-COMMAND_CAPABILITIES = {
-    'spark_submit': 'spark_master',  # Spark submit commands chạy trên master
-    'spark_common': 'spark_common',   # Commands chạy trên bất kỳ spark node nào
-    'hadoop_admin': 'hadoop_namenode',
-    'kafka_admin': 'kafka',
-}
-
+# ============== DAG 5: Big Data Pipeline Start ==============
 
 with DAG(
     dag_id='bigdata_pipeline_start',
-    description='full path from start dockers to submit to Spark',
+    description='Start Big Data Cluster and Run Pipeline',
     start_date=datetime(2024, 1, 1),
     schedule=None,
     catchup=False,
     tags=['bigdata', 'pipeline', 'start'],
     params={
-        'start_hadoop': Param(True, type='boolean', description='Khởi động Hadoop (Namenode + Datanode)'),
-        'start_spark': Param(True, type='boolean', description='Khởi động Spark (Master + Worker)'),
-        'start_kafka': Param(True, type='boolean', description='Khởi động Kafka'),
+        'start_hadoop': Param(True, type='boolean'),
+        'start_spark': Param(True, type='boolean'),
+        'start_kafka': Param(True, type='boolean'),
     }
 ) as dag_bigdata_start:
 
-    def start_service(service_name, timeout=300, **context):
-        """
-        Khởi động service dựa trên CAPABILITY, không hardcode host
-        Worker nào có capability phù hợp sẽ tự động nhận task
-        """
-        config = BIGDATA_SERVICES[service_name]
+    def start_service(service_key, **context):
+        """Start a service using non-blocking Celery task"""
+        # check skip
+        if 'spark' in service_key and not context['params'].get('start_spark', True):
+            return {'skipped': True}
+        if 'hadoop' in service_key and not context['params'].get('start_hadoop', True):
+            return {'skipped': True}
+        if 'kafka' in service_key and not context['params'].get('start_kafka', True):
+            return {'skipped': True}
 
+        config = BIGDATA_SERVICES[service_key]
+        
+        # Non-blocking submission
         result = docker_compose_up.apply_async(
             args=[config['path']],
             kwargs={
@@ -257,260 +144,146 @@ with DAG(
                 'build': False,
                 'force_recreate': False,
             },
-            queue=config['capability']  # ✅ Route theo capability, không phải node
+            queue=config['capability']
         )
+        
+        print(f"Started {service_key} on {config['capability']}: {result.id}")
+        return {'task_id': result.id, 'service': service_key}
 
-        # Chờ kết quả từ Celery worker bằng polling
-        try:
-            output = wait_for_celery_result(result, timeout=timeout)
-            return {
-                'task_id': result.id,
-                'service': service_name,
-                'capability': config['capability'],  # Ghi nhận capability, không phải host
-                'description': config['description'],
-                'output': output,
-                'status': 'success'
-            }
-        except Exception as e:
-            raise Exception(f"Failed to start {service_name} (requires {config['capability']}): {str(e)}")
-
-    # Hadoop tasks
-    def start_hadoop_namenode(**context):
-        if not context['params'].get('start_hadoop', True):
-            return {'skipped': True}
-        return start_service('hadoop-namenode', **context)
-
-    def start_hadoop_datanode(**context):
-        if not context['params'].get('start_hadoop', True):
-            return {'skipped': True}
-        return start_service('hadoop-datanode', **context)
-
-    # Spark tasks
-    def start_spark_master(**context):
-        if not context['params'].get('start_spark', True):
-            return {'skipped': True}
-        return start_service('spark-master', **context)
-
-    def start_spark_worker(**context):
-        if not context['params'].get('start_spark', True):
-            return {'skipped': True}
-        return start_service('spark-worker', **context)
-
-    # Kafka task
-    def start_kafka(**context):
-        if not context['params'].get('start_kafka', True):
-            return {'skipped': True}
-        return start_service('kafka', **context)
-
-    def prepare_data(**context):
+    def run_spark_job(job_name, **context):
+        """Run a Spark job (Blocking wait for completion)"""
         if not context['params'].get('start_spark', True):
             return {'skipped': True}
 
-        command = "sh ~/bd/fp_pr_tasks/credit_card/exes/prepare.sh"
+        scripts = {
+            'prepare_data': 'sh ~/bd/fp_pr_tasks/credit_card/exes/prepare.sh',
+            'train_model': 'sh ~/bd/fp_pr_tasks/credit_card/exes/train.sh',
+            'streaming_data': 'sh ~/bd/fp_pr_tasks/credit_card/exes/producer.sh',
+            'predict': 'sh ~/bd/fp_pr_tasks/credit_card/exes/predict.sh'
+        }
+        
+        command = scripts.get(job_name)
+        if not command:
+             raise ValueError(f"Unknown job: {job_name}")
 
-        # Set JAVA_HOME to Java 17 for Spark
         env_vars = {
             'JAVA_HOME': '/usr/lib/jvm/java-17-openjdk-amd64',
             'PATH': '/usr/lib/jvm/java-17-openjdk-amd64/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin'
         }
 
-        # ✅ Route theo capability: spark_master (không hardcode queue/host)
-        result = run_command.apply_async(
-            args=[command],
-            kwargs={'env_vars': env_vars},
-            queue='spark_master'  # Worker nào có spark_master capability sẽ nhận
-        )
-
-        try:
-            output = wait_for_celery_result(result, timeout=600) # Spark jobs might take longer
-            return {
-                'task_id': result.id,
-                'command': command,
-                'capability': 'spark_master',
-                'output': output,
-                'status': 'success'
-            }
-        except Exception as e:
-            raise Exception(f"Failed to submit spark job (requires spark_master capability): {str(e)}")
-
-    def train_model(**context):
-        if not context['params'].get('start_spark', True):
-            return {'skipped': True}
-
-        command = "sh ~/bd/fp_pr_tasks/credit_card/exes/train.sh"
-
-        # Set JAVA_HOME to Java 17 for Spark
-        env_vars = {
-            'JAVA_HOME': '/usr/lib/jvm/java-17-openjdk-amd64',
-            'PATH': '/usr/lib/jvm/java-17-openjdk-amd64/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin'
-        }
-
+        # Submit to master
         result = run_command.apply_async(
             args=[command],
             kwargs={'env_vars': env_vars},
             queue='spark_master'
         )
 
-        try:
-            output = wait_for_celery_result(result, timeout=600)
-            return {
-                'task_id': result.id,
-                'command': command,
-                'capability': 'spark_master',
-                'output': output,
-                'status': 'success'
-            }
-        except Exception as e:
-            raise Exception(f"Failed to submit spark job (requires spark_master capability): {str(e)}")
-    
-    def streaming_data(**context):
-        if not context['params'].get('start_spark', True):
-            return {'skipped': True}
+        # BLOCKING WAIT
+        output = wait_for_celery_result(result, timeout=900)
+        return {'task_id': result.id, 'job': job_name, 'output': output}
 
-        command = 'sh ~/bd/fp_pr_tasks/credit_card/exes/producer.sh'
+    # --- Tasks Definition ---
 
-        # Set JAVA_HOME to Java 17 for Spark
-        env_vars = {
-            'JAVA_HOME': '/usr/lib/jvm/java-17-openjdk-amd64',
-            'PATH': '/usr/lib/jvm/java-17-openjdk-amd64/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin'
-        }
-
-        result = run_command.apply_async(
-            args=[command],
-            kwargs={'env_vars': env_vars},
-            queue='spark_master'
-        )
-
-        try:
-            output = wait_for_celery_result(result, timeout=600)
-            return {
-                'task_id': result.id,
-                'command': command,
-                'capability': 'spark_master',
-                'output': output,
-                'status': 'success'
-            }
-        except Exception as e:
-            raise Exception(f"Failed to submit spark job (requires spark_master capability): {str(e)}")
-    
-    def predict(**context):
-        if not context['params'].get('start_spark', True):
-            return {'skipped': True}
-
-        command = 'sh ~/bd/fp_pr_tasks/credit_card/exes/predict.sh'
-
-        # Set JAVA_HOME to Java 17 for Spark
-        env_vars = {
-            'JAVA_HOME': '/usr/lib/jvm/java-17-openjdk-amd64',
-            'PATH': '/usr/lib/jvm/java-17-openjdk-amd64/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin'
-        }
-
-        result = run_command.apply_async(
-            args=[command],
-            kwargs={'env_vars': env_vars},
-            queue='spark_master'
-        )
-
-        try:
-            output = wait_for_celery_result(result, timeout=600)
-            return {
-                'task_id': result.id,
-                'command': command,
-                'capability': 'spark_master',
-                'output': output,
-                'status': 'success'
-            }
-        except Exception as e:
-            raise Exception(f"Failed to submit spark job (requires spark_master capability): {str(e)}")
-
-    # --------- Tạo tasks -------------
-
-    task_hadoop_namenode = PythonOperator(
+    # 1. Services (Non-blocking)
+    t_namenode = PythonOperator(
         task_id='start_hadoop_namenode',
-        python_callable=start_hadoop_namenode,
+        python_callable=start_service,
+        op_kwargs={'service_key': 'hadoop-namenode'},
     )
-
-    task_hadoop_datanode = PythonOperator(
+    
+    t_datanode = PythonOperator(
         task_id='start_hadoop_datanode',
-        python_callable=start_hadoop_datanode,
+        python_callable=start_service,
+        op_kwargs={'service_key': 'hadoop-datanode'},
     )
 
-    task_spark_master = PythonOperator(
+    t_spark_master = PythonOperator(
         task_id='start_spark_master',
-        python_callable=start_spark_master,
+        python_callable=start_service,
+        op_kwargs={'service_key': 'spark-master'},
     )
 
-    task_spark_worker = PythonOperator(
+    t_spark_worker = PythonOperator(
         task_id='start_spark_worker',
-        python_callable=start_spark_worker,
+        python_callable=start_service,
+        op_kwargs={'service_key': 'spark-worker'},
     )
 
-    task_kafka = PythonOperator(
+    t_kafka = PythonOperator(
         task_id='start_kafka',
-        python_callable=start_kafka,
+        python_callable=start_service,
+        op_kwargs={'service_key': 'kafka'},
     )
 
-    prepare_data = PythonOperator(
+    # 2. Jobs (Blocking)
+    t_prepare = PythonOperator(
         task_id='prepare_data',
-        python_callable=prepare_data,
+        python_callable=run_spark_job,
+        op_kwargs={'job_name': 'prepare_data'},
     )
 
-    train_model = PythonOperator(
+    t_train = PythonOperator(
         task_id='train_model',
-        python_callable=train_model,
+        python_callable=run_spark_job,
+        op_kwargs={'job_name': 'train_model'},
     )
 
-    streaming_data = PythonOperator(
+    t_streaming = PythonOperator(
         task_id='streaming_data',
-        python_callable=streaming_data,
+        python_callable=run_spark_job,
+        op_kwargs={'job_name': 'streaming_data'},
     )
 
-    predict = PythonOperator(
+    t_predict = PythonOperator(
         task_id='predict',
-        python_callable=predict,
+        python_callable=run_spark_job,
+        op_kwargs={'job_name': 'predict'},
     )
 
-    # ----------- ----------- -------------
-
-    # hadoop
-    task_hadoop_namenode >> task_hadoop_datanode
-
-    # spark
-    task_spark_master >> task_spark_worker
-
-    # kafka
-    task_kafka
-
-    # full
-    [task_hadoop_datanode, task_spark_worker, task_kafka] >> prepare_data >> train_model >> predict		
-    [task_hadoop_datanode, task_spark_worker, task_kafka] >> prepare_data >> train_model>> streaming_data 
-
-
-
+    # --- Dependencies ---
+    
+    t_namenode >> t_datanode
+    t_spark_master >> t_spark_worker
+    
+    # Wait for infrastructure before running jobs
+    cluster_ready = [t_datanode, t_spark_worker, t_kafka]
+    
+    cluster_ready >> t_prepare >> t_train
+    
+    # Parallel paths after training
+    t_train >> t_predict
+    t_train >> t_streaming
 
 
 # ============== DAG 6: Big Data Pipeline Stop ==============
+
 with DAG(
     dag_id='bigdata_pipeline_stop',
-    description='Pipeline dừng Big Data cluster',
+    description='Stop Big Data Cluster',
     start_date=datetime(2024, 1, 1),
     schedule=None,
     catchup=False,
     tags=['bigdata', 'pipeline', 'stop'],
     params={
-        'stop_hadoop': Param(True, type='boolean', description='Dừng Hadoop'),
-        'stop_spark': Param(True, type='boolean', description='Dừng Spark'),
-        'stop_kafka': Param(True, type='boolean', description='Dừng Kafka'),
-        'remove_volumes': Param(False, type='boolean', description='Xóa volumes'),
+        'stop_hadoop': Param(True, type='boolean'),
+        'stop_spark': Param(True, type='boolean'),
+        'stop_kafka': Param(True, type='boolean'),
+        'remove_volumes': Param(False, type='boolean'),
     }
 ) as dag_bigdata_stop:
 
-    def stop_service(service_name, remove_volumes=False, timeout=300, **context):
-        """
-        Dừng service dựa trên CAPABILITY
-        Worker nào có capability phù hợp sẽ tự động nhận task
-        """
-        config = BIGDATA_SERVICES[service_name]
+    def stop_service(service_key, **context):
+        """Stop service (Non-blocking)"""
+        # check skip
+        if 'spark' in service_key and not context['params'].get('stop_spark', True):
+            return {'skipped': True}
+        if 'hadoop' in service_key and not context['params'].get('stop_hadoop', True):
+            return {'skipped': True}
+        if 'kafka' in service_key and not context['params'].get('stop_kafka', True):
+            return {'skipped': True}
+
+        config = BIGDATA_SERVICES[service_key]
+        remove_volumes = context['params'].get('remove_volumes', False)
 
         result = docker_compose_down.apply_async(
             args=[config['path']],
@@ -519,80 +292,43 @@ with DAG(
                 'volumes': remove_volumes,
                 'remove_orphans': False,
             },
-            queue=config['capability']  # ✅ Route theo capability
+            queue=config['capability']
         )
+        return {'task_id': result.id, 'service': service_key}
 
-        # Chờ kết quả từ Celery worker bằng polling
-        try:
-            output = wait_for_celery_result(result, timeout=timeout)
-            return {
-                'task_id': result.id,
-                'service': service_name,
-                'capability': config['capability'],
-                'output': output,
-                'status': 'success'
-            }
-        except Exception as e:
-            raise Exception(f"Failed to stop {service_name} (requires {config['capability']}): {str(e)}")
+    # --- Stop Tasks ---
 
-    # Stop tasks
-    def stop_kafka(**context):
-        if not context['params'].get('stop_kafka', True):
-            return {'skipped': True}
-        return stop_service('kafka', context['params'].get('remove_volumes', False), **context)
-
-    def stop_spark_worker(**context):
-        if not context['params'].get('stop_spark', True):
-            return {'skipped': True}
-        return stop_service('spark-worker', context['params'].get('remove_volumes', False), **context)
-
-    def stop_spark_master(**context):
-        if not context['params'].get('stop_spark', True):
-            return {'skipped': True}
-        return stop_service('spark-master', context['params'].get('remove_volumes', False), **context)
-
-    def stop_hadoop_datanode(**context):
-        if not context['params'].get('stop_hadoop', True):
-            return {'skipped': True}
-        return stop_service('hadoop-datanode', context['params'].get('remove_volumes', False), **context)
-
-    def stop_hadoop_namenode(**context):
-        if not context['params'].get('stop_hadoop', True):
-            return {'skipped': True}
-        return stop_service('hadoop-namenode', context['params'].get('remove_volumes', False), **context)
-
-    # Tạo tasks
-    task_stop_kafka = PythonOperator(
+    t_stop_kafka = PythonOperator(
         task_id='stop_kafka',
-        python_callable=stop_kafka,
+        python_callable=stop_service,
+        op_kwargs={'service_key': 'kafka'},
     )
 
-    task_stop_spark_worker = PythonOperator(
+    t_stop_spark_w = PythonOperator(
         task_id='stop_spark_worker',
-        python_callable=stop_spark_worker,
+        python_callable=stop_service,
+        op_kwargs={'service_key': 'spark-worker'},
     )
 
-    task_stop_spark_master = PythonOperator(
+    t_stop_spark_m = PythonOperator(
         task_id='stop_spark_master',
-        python_callable=stop_spark_master,
+        python_callable=stop_service,
+        op_kwargs={'service_key': 'spark-master'},
     )
 
-    task_stop_hadoop_datanode = PythonOperator(
+    t_stop_hadoop_d = PythonOperator(
         task_id='stop_hadoop_datanode',
-        python_callable=stop_hadoop_datanode,
+        python_callable=stop_service,
+        op_kwargs={'service_key': 'hadoop-datanode'},
     )
 
-    task_stop_hadoop_namenode = PythonOperator(
+    t_stop_hadoop_n = PythonOperator(
         task_id='stop_hadoop_namenode',
-        python_callable=stop_hadoop_namenode,
+        python_callable=stop_service,
+        op_kwargs={'service_key': 'hadoop-namenode'},
     )
 
-    # Cấu hình dependency dừng services (tách biệt các cụm)
-    # 1. Hadoop cluster: Datanode -> Namenode (Dừng Data trước)
-    task_stop_hadoop_datanode >> task_stop_hadoop_namenode
-
-    # 2. Spark cluster: Worker -> Master (Dừng Worker trước)
-    task_stop_spark_worker >> task_stop_spark_master
-
-    # 3. Kafka: Độc lập
-    task_stop_kafka
+    # Order: Worker -> Master (or Dataplane -> Controlplane)
+    t_stop_spark_w >> t_stop_spark_m
+    t_stop_hadoop_d >> t_stop_hadoop_n
+    t_stop_kafka
