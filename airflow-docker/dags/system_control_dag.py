@@ -62,51 +62,6 @@ def wait_for_celery_result(result, timeout=600, poll_interval=5):
 
     raise TimeoutError(f"Celery task {result.id} timed out after {timeout} seconds")
 
-# ============== DAG 4: Docker Compose Stop ==============
-
-with DAG(
-    dag_id='docker_compose_stop',
-    description='DAG to stop arbitrary Docker Compose services',
-    start_date=datetime(2024, 1, 1),
-    schedule=None,
-    catchup=False,
-    tags=['docker', 'compose', 'stop'],
-    params={
-        'compose_path': Param('~/bd/spark/docker-compose.yml', type='string', description='Path to docker-compose.yml'),
-        'services': Param('', type='string', description='Services to stop (comma separated). Empty for all.'),
-        'remove_volumes': Param(False, type='boolean', description='Remove volumes'),
-        'remove_orphans': Param(False, type='boolean', description='Remove orphans'),
-    }
-) as dag_compose_stop:
-
-    def task_compose_stop(**context):
-        """Stop docker-compose services (Non-blocking submission)"""
-        params = context['params']
-        path = params.get('compose_path')
-        services_str = params.get('services', '')
-        volumes = params.get('remove_volumes', False)
-        remove_orphans = params.get('remove_orphans', False)
-
-        services = [s.strip() for s in services_str.split(',')] if services_str.strip() else None
-
-        # Fire and forget / Async submission
-        result = docker_compose_down.apply_async(
-            args=[path],
-            kwargs={
-                'services': services,
-                'volumes': volumes,
-                'remove_orphans': remove_orphans
-            }
-            # No specific queue enforced here, relies on default or routing
-        )
-        
-        return {'task_id': result.id, 'compose_path': path, 'status': 'submitted'}
-
-    stop_compose_task = PythonOperator(
-        task_id='stop_docker_compose',
-        python_callable=task_compose_stop,
-    )
-
 # ============== DAG 5: Big Data Pipeline Start ==============
 
 with DAG(
@@ -171,16 +126,17 @@ with DAG(
             'PATH': '/usr/lib/jvm/java-17-openjdk-amd64/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin'
         }
 
-        # Submit to master
+        # Route to worker based on job capability instead of hardcoded queue
         result = run_command.apply_async(
             args=[command],
             kwargs={'env_vars': env_vars},
-            queue='spark_master'
+            queue=job_name  # Use job_name as capability/queue name
         )
 
         # BLOCKING WAIT
         output = wait_for_celery_result(result, timeout=900)
         return {'task_id': result.id, 'job': job_name, 'output': output}
+
 
     # --- Tasks Definition ---
 

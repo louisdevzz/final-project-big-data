@@ -2,8 +2,12 @@
   "worker_name": "spark-master-worker",
   "capabilities": [
     "spark_master",
-    "docker_host"
+    "docker_host",
+    "prepare_data",
+    "train_model",
+    "streaming_data",
+    "predict"
   ],
-  "description": "Spark Master node - handles master services and spark-submit commands",
-  "note": "Deploy this config to the machine that will run Spark Master (192.168.80.55)"
+  "description": "Spark Master node - handles master services, spark-submit commands, and data pipeline tasks",
+  "note": "Deploy this config to the machine that will run Spark Master"
 }

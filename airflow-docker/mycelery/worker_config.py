@@ -49,6 +49,11 @@ def get_worker_queues():
         'kafka': ['kafka'],
         'docker_host': ['docker_host'],
         'gpu': ['gpu'],
+        # Data pipeline task capabilities
+        'prepare_data': ['prepare_data'],
+        'train_model': ['train_model'],
+        'streaming_data': ['streaming_data'],
+        'predict': ['predict'],
     }
 
     queues = set()
