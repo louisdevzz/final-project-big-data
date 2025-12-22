@@ -1,17 +1,5 @@
 # Airflow Big Data Pipeline System
 
-## 📋 Mục lục
-
-- [Giới thiệu](#giới-thiệu)
-- [Kiến trúc hệ thống](#kiến-trúc-hệ-thống)
-- [Cài đặt](#cài-đặt)
-- [Cấu hình Worker](#cấu-hình-worker)
-- [Luồng hoạt động](#luồng-hoạt-động)
-- [Sử dụng](#sử-dụng)
-- [Troubleshooting](#troubleshooting)
-
----
-
 ## 🏗️ Kiến trúc hệ thống
 
 ### Sơ đồ tổng quan
