@@ -12,20 +12,6 @@
 
 ---
 
-## 🎯 Giới thiệu
-
-Hệ thống quản lý Big Data Pipeline sử dụng **Apache Airflow** và **Celery** để điều phối các tác vụ phân tán trên nhiều máy chủ. Hệ thống được thiết kế theo mô hình **capability-based routing**, cho phép linh hoạt trong việc phân bổ tác vụ mà không cần hardcode IP hoặc hostname của từng máy.
-
-### ✨ Tính năng chính
-
-- ✅ **Capability-based routing**: Tasks được định tuyến dựa trên khả năng của worker
-- ✅ **Distributed execution**: Chạy tasks song song trên nhiều máy
-- ✅ **Docker orchestration**: Quản lý các dịch vụ Big Data qua Docker Compose
-- ✅ **Data pipeline automation**: Tự động hóa quy trình xử lý dữ liệu với Spark, Hadoop, Kafka
-- ✅ **High availability**: Hỗ trợ nhiều workers cùng capability cho load balancing và failover
-
----
-
 ## 🏗️ Kiến trúc hệ thống
 
 ### Sơ đồ tổng quan
@@ -59,45 +45,6 @@ Hệ thống quản lý Big Data Pipeline sử dụng **Apache Airflow** và **C
 │          (Lưu metadata Airflow & kết quả Celery)            │
 └─────────────────────────────────────────────────────────────┘
 ```
-
-### Các thành phần
-
-#### 1. **Airflow Components** (Docker containers)
-
-| Service                 | Port | Mô tả                                                 |
-| ----------------------- | ---- | ----------------------------------------------------- |
-| `postgres`              | 5432 | Cơ sở dữ liệu PostgreSQL lưu metadata và task results |
-| `redis`                 | 6379 | Message broker cho Celery                             |
-| `airflow-apiserver`     | 9090 | API server của Airflow 3.0+                           |
-| `airflow-scheduler`     | -    | Lập lịch và trigger các DAGs                          |
-| `airflow-dag-processor` | -    | Xử lý DAG files                                       |
-| `airflow-worker`        | -    | Celery worker mặc định (default queue)                |
-| `airflow-triggerer`     | -    | Xử lý deferred tasks                                  |
-
-#### 2. **Celery Workers** (Chạy trên các máy riêng biệt)
-
-Workers được phân loại theo **capabilities** thay vì hardcode IP:
-
-| Capability        | Queue             | Chức năng                    |
-| ----------------- | ----------------- | ---------------------------- |
-| `spark_master`    | `spark_master`    | Chạy spark-submit commands   |
-| `spark_worker`    | `spark_worker`    | Distributed Spark processing |
-| `hadoop_namenode` | `hadoop_namenode` | Quản lý HDFS metadata        |
-| `hadoop_datanode` | `hadoop_datanode` | Lưu trữ HDFS data            |
-| `kafka`           | `kafka`           | Kafka broker services        |
-| `docker_host`     | `docker_host`     | Bất kỳ máy có Docker         |
-| `prepare_data`    | `prepare_data`    | Data preparation task        |
-| `train_model`     | `train_model`     | Model training task          |
-| `streaming_data`  | `streaming_data`  | Real-time streaming task     |
-| `predict`         | `predict`         | Prediction/inference task    |
-
-#### 3. **Big Data Services**
-
-Các services được quản lý qua Docker Compose:
-
-- **Spark**: Master + Workers
-- **Hadoop**: Namenode + Datanodes
-- **Kafka**: Broker + Zookeeper
 
 ---
 
@@ -155,17 +102,6 @@ AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@postgr
 ---
 
 ## 🔧 Cấu hình Worker
-
-### Capability-based Routing
-
-Hệ thống sử dụng mô hình **capability-based routing** để phân phối tasks linh hoạt:
-
-**Lợi ích:**
-
-- ✅ IP thay đổi không ảnh hưởng hệ thống
-- ✅ Dễ dàng scale workers (thêm/bớt máy)
-- ✅ Tự động load balancing
-- ✅ High availability (nhiều workers cùng capability)
 
 ### Triển khai Workers
 
@@ -354,59 +290,7 @@ Airflow Scheduler
            └─► [PythonOperator] stop services...
 ```
 
-### 2. Flow chi tiết của một DAG
-
-#### **DAG: bigdata_pipeline_start**
-
-Pipeline này khởi động cluster Big Data và chạy các tasks xử lý dữ liệu:
-
-**Phase 1: Infrastructure Setup (Non-blocking)**
-
-```
-start_hadoop_namenode  ──► start_hadoop_datanode
-                                    │
-start_spark_master     ──► start_spark_worker
-                                    │
-start_kafka ─────────────────────────┘
-                                    │
-                          [Cluster Ready]
-```
-
-**Phase 2: Data Processing (Blocking - chờ hoàn thành)**
-
-```
-[Cluster Ready]
-      │
-      ├─► prepare_data (blocking wait)
-      │        │
-      │        └─► Chạy script chuẩn bị dữ liệu
-      │
-      ├─► train_model (blocking wait)
-      │        │
-      │        └─► Train model ML với Spark
-      │
-      ├─► predict (parallel với streaming)
-      │        │
-      │        └─► Chạy dự đoán
-      │
-      └─► streaming_data (parallel với predict)
-               │
-               └─► Stream dữ liệu thời gian thực qua Kafka
-```
-
-#### **DAG: bigdata_pipeline_stop**
-
-Dừng cluster theo thứ tự an toàn:
-
-```
-stop_kafka
-
-stop_spark_worker  ──► stop_spark_master
-
-stop_hadoop_datanode  ──► stop_hadoop_namenode
-```
-
-### 3. Task Routing Process
+### 2. Task Routing Process
 
 ```
 ┌──────────────────────────┐
@@ -446,40 +330,7 @@ stop_hadoop_datanode  ──► stop_hadoop_namenode
 └──────────────────────────┘
 ```
 
-### 4. Task Types
-
-#### **Non-blocking Tasks** (Infrastructure)
-
-- **Mục đích**: Khởi động services nhanh, không chờ hoàn thành
-- **Cơ chế**: `apply_async()` trả về ngay task ID
-- **Ví dụ**: Start Docker services
-
-```python
-result = docker_compose_up.apply_async(
-    args=[config['path']],
-    kwargs={'detach': True},
-    queue='spark_master'  # Route to worker with spark_master capability
-)
-print(f"Task submitted: {result.id}")
-# Không chờ, tiếp tục task tiếp theo
-```
-
-#### **Blocking Tasks** (Data Processing)
-
-- **Mục đích**: Phải đợi task hoàn thành mới tiếp tục
-- **Cơ chế**: `wait_for_celery_result()` poll cho đến khi done
-- **Ví dụ**: Spark jobs xử lý dữ liệu
-
-```python
-result = run_command.apply_async(
-    args=['sh ~/bd/fp_pr_tasks/credit_card/exes/train.sh'],
-    queue='train_model'
-)
-# BLOCKING - đợi đến khi task hoàn thành
-output = wait_for_celery_result(result, timeout=900)
-```
-
-### 5. Configuration Files
+### 3. Configuration Files
 
 #### **DAG Configuration** (`dags/system_control_dag.py`)
 
@@ -520,115 +371,6 @@ broker_url = 'redis://192.168.80.229:6379/0'
 result_backend = 'db+postgresql://airflow:airflow@192.168.80.229/airflow'
 task_time_limit = 3600
 worker_concurrency = 4
-```
-
----
-
-## 🚀 Sử dụng
-
-### 1. Truy cập Airflow Web UI
-
-```
-http://localhost:9090
-```
-
-Login với credentials mặc định:
-
-- **Username**: `airflow`
-- **Password**: `airflow`
-
-### 2. Chạy Big Data Pipeline
-
-#### **Start Pipeline**
-
-1. Vào DAGs tab → Tìm `bigdata_pipeline_start`
-2. Click nút ▶️ "Trigger DAG"
-3. Cấu hình tùy chọn (nếu cần):
-   ```json
-   {
-     "start_hadoop": true,
-     "start_spark": true,
-     "start_kafka": true
-   }
-   ```
-4. Click "Trigger"
-
-Pipeline sẽ:
-
-- ✅ Khởi động Hadoop cluster (Namenode → Datanode)
-- ✅ Khởi động Spark cluster (Master → Worker)
-- ✅ Khởi động Kafka broker
-- ✅ Chạy data preparation
-- ✅ Train machine learning model
-- ✅ Chạy streaming và prediction song song
-
-#### **Stop Pipeline**
-
-1. Vào DAGs tab → Tìm `bigdata_pipeline_stop`
-2. Trigger với options:
-   ```json
-   {
-     "stop_hadoop": true,
-     "stop_spark": true,
-     "stop_kafka": true,
-     "remove_volumes": false
-   }
-   ```
-
-### 3. Monitoring
-
-#### **Xem logs trong Airflow UI**
-
-1. Click vào DAG run
-2. Click vào task cụ thể
-3. Tab "Logs" hiển thị output chi tiết
-
-#### **Monitor Celery workers**
-
-```bash
-# Xem active tasks
-celery -A mycelery.system_worker inspect active
-
-# Xem registered tasks
-celery -A mycelery.system_worker inspect registered
-
-# Xem worker stats
-celery -A mycelery.system_worker inspect stats
-```
-
-#### **Flower UI (Optional)**
-
-Start Flower để xem Celery dashboard:
-
-```bash
-docker compose --profile flower up -d
-
-# Truy cập: http://localhost:5555
-```
-
-### 4. Manual Task Execution
-
-Có thể chạy Celery tasks trực tiếp từ Python:
-
-```python
-from mycelery.system_worker import docker_compose_up, run_command
-
-# Start Spark Master
-result = docker_compose_up.apply_async(
-    args=['~/bd/spark/docker-compose.yml'],
-    kwargs={'services': 'spark-master', 'detach': True},
-    queue='spark_master'
-)
-
-# Lấy kết quả
-print(result.get(timeout=60))
-
-# Chạy command
-result = run_command.apply_async(
-    args=['echo "Hello from worker"'],
-    queue='spark_master'
-)
-print(result.get())
 ```
 
 ---
@@ -775,39 +517,3 @@ ls -la ~/bd/spark/docker-compose.yml
 docker --version
 docker compose version
 ```
-
----
-
-## 📚 Tài liệu tham khảo
-
-- [Apache Airflow Documentation](https://airflow.apache.org/docs/)
-- [Celery Documentation](https://docs.celeryq.dev/)
-- [Docker Compose Documentation](https://docs.docker.com/compose/)
-
----
-
-## 📝 Lưu ý quan trọng
-
-1. **IP Addresses**: Cập nhật địa chỉ IP trong các file sau cho phù hợp với môi trường của bạn:
-
-   - `docker-compose.yaml`: `AIRFLOW__CELERY__BROKER_URL`
-   - `mycelery/system_worker.py`: `REDIS_BROKER`, `CELERY_BACKEND`
-   - `mycelery/celeryconfig.py`: `broker_url`, `result_backend`
-
-2. **Security**: Configuration hiện tại chỉ phù hợp cho môi trường development. Với production:
-
-   - Sử dụng password cho Redis
-   - Mã hóa kết nối database
-   - Cấu hình authentication cho Airflow
-   - Sử dụng secrets management
-
-3. **Resource Requirements**:
-
-   - RAM: Tối thiểu 4GB cho Airflow cluster
-   - CPU: Khuyến nghị 2+ cores
-   - Disk: Tối thiểu 10GB
-
-4. **Backup**: Thường xuyên backup:
-   - PostgreSQL database: `docker-compose exec postgres pg_dump airflow > backup.sql`
-   - DAG files: Git repository
-   - Worker configs: `/etc/celery/`
