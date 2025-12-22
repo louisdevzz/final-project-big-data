@@ -55,16 +55,6 @@ This project implements an end-to-end machine learning pipeline for detecting fr
 
 ## 🚀 Quick Start
 
-### Prerequisites
-
-- Apache Airflow 2.x
-- Apache Spark 3.x
-- Apache Hadoop 3.x
-- Apache Kafka 3.x
-- Python 3.8+
-- Redis
-- PostgreSQL
-
 ### 1. Set Up Airflow System
 
 Navigate to the Airflow directory and follow the setup instructions:
@@ -120,7 +110,7 @@ bash producer.sh  # Stream test data (in another terminal)
 - **Hadoop HDFS**: `hdfs://192.168.80.57:9000`
 - **Spark Master**: `spark://192.168.80.55:7077`
 - **Kafka Broker**: `192.168.80.57:9093`
-- **Airflow Web UI**: `http://localhost:8080` (default)
+- **Airflow Web UI**: `http://localhost:9090` (default)
 
 ### Kafka Topics
 
