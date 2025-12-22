@@ -129,10 +129,10 @@ source .venv/bin/activate
 echo "AIRFLOW_UID=$(id -u)" > .env
 
 # Khởi động tất cả services
-docker-compose up -d
+docker compose up -d
 
 # Kiểm tra trạng thái
-docker-compose ps
+docker compose ps
 ```
 
 Airflow Web UI sẽ có sẵn tại: `http://localhost:9090`
